@@ -14,30 +14,45 @@ import swiftllm
 
 
 if __name__ == '__main__':
-    home = os.path.expanduser("~")
     script_dir = os.path.dirname(os.path.realpath(__file__))
     repo_dir = os.path.dirname(script_dir)
     parser = argparse.ArgumentParser()
     parser.description = """
-        An example script to demonstrate how to use the swiftllm model executor directly for inferencing without using the engine
+        An example script to demonstrate how to use the NEO offline inference engine.
     """
     parser.add_argument(
         "--model-path",
-        help="Path to the model. Note: please download the model weights from HuggingFace in advance and specify the path here.",
-        type=str,
-        default=f"{home}/weights/Llama-3-8B"
+        help="Path to the model. Note: please download the model weights in advance and specify the path here.",
+        type=str
     )
     parser.add_argument(
-        "--library-path",
-        help="Path to the shared library",
-        type=str,
-        default=f"{repo_dir}/pacpu/build/libpacpu-llama3_8b-tp1.so"
+        "--model-name",
+        help="Name of the model in lowercase. Helps in loading CPU kernel library",
+        type=str
+    )
+    parser.add_argument(
+        "--tp-degree",
+        help="Tensor parallel degree",
+        type=int,
+        default=1
     )
     parser.add_argument(
         "--profile-result-path",
         help="Path to folder of profiling results",
         type=str,
         default=f"{repo_dir}/profile_results/"
+    )
+    parser.add_argument(
+        "--num-gpu-blocks",
+        help="Number of GPU blocks to use",
+        type=int,
+        default=50
+    )
+    parser.add_argument(
+        "--swap-space",
+        help="CPU swap space in GB",
+        type=int,
+        default=2
     )
     parser.add_argument(
         "--prompt-path",
@@ -49,13 +64,13 @@ if __name__ == '__main__':
         "--num-gpu-requests",
         help="Number of GPU requests",
         type=int,
-        default=10
+        default=2
     )
     parser.add_argument(
         "--num-cpu-requests",
         help="Number of CPU requests",
         type=int,
-        default=10
+        default=2
     )
     parser.add_argument(
         "--monitor-performace",
@@ -73,15 +88,15 @@ if __name__ == '__main__':
 
         block_size = 16,
         gpu_mem_utilization = 0.99,
-        num_gpu_blocks_override = 1300,
-        swap_space = 2,
-        max_seqs_in_block_table = 1024,
-        max_blocks_per_seq = 512,
+        num_gpu_blocks_override = args.num_gpu_blocks_override,
+        swap_space = args.swap_space,
+        max_seqs_in_block_table = 10,
+        max_blocks_per_seq = 100,
 
-        max_batch_size = 512,
-        max_tokens_in_batch = 20000,
+        max_batch_size = 10,
+        max_tokens_in_batch = 600,
 
-        library_path=args.library_path,
+        library_path=f"{repo_dir}/pacpu/build/libpacpu-{args.model_name}-tp{args.tp_degree}.so",
         profile_result_path=args.profile_result_path,
 
         extra_layer_for_cprf=True,
@@ -151,11 +166,11 @@ if __name__ == '__main__':
         for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
             batches[0].add_cdec(reqs[i])
             
-        # Comment out the following 4 lines to run pure decoding iterations
-        reqs.append(swiftllm.create_request(input_ids, len(reqs)))
-        reqs.append(swiftllm.create_request(input_ids, len(reqs)))
-        batches[0].add_pref(reqs[-2], is_gpu=False)
-        batches[1].add_pref(reqs[-1], is_gpu=False)
+        # Un-comment the following 4 lines to run mixed batches
+        # reqs.append(swiftllm.create_request(input_ids, len(reqs)))
+        # reqs.append(swiftllm.create_request(input_ids, len(reqs)))
+        # batches[0].add_pref(reqs[-2], is_gpu=False)
+        # batches[1].add_pref(reqs[-1], is_gpu=False)
 
         start = time.perf_counter()
         engine.step(batches)
