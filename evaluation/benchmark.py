@@ -10,21 +10,21 @@ from tqdm import tqdm
 
 # pylint: disable=import-error
 from api_client import request_completions
-from server import start_server, stop_server
 
 home = os.path.expanduser("~")
-input_dir = f"{home}/neo-data/tokens"
+cur_dir = os.path.dirname(os.path.abspath(__file__))
+
+res_dir = f"{cur_dir}/results"
+os.makedirs(res_dir, exist_ok=True)
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename=f"{home}/swiftLLM/evaluation/bench.log", level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
-
-res_dir = f"{home}/swiftLLM/evaluation/results"
-os.makedirs(res_dir, exist_ok=True)
+logging.basicConfig(filename=f"{cur_dir}/bench.log", level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
 
 api_url = "http://localhost:8000/v1/completions"
 server_name = None
 
-with open(f"{home}/swiftLLM/evaluation/config.json") as cf:
+
+with open(f"{cur_dir}/config.json") as cf:
     config = json.load(cf)
 
 
@@ -111,43 +111,12 @@ def prepare_mock_test(
 def prepare_real_test(
     dataset_name: str
 ) -> tuple[list[list[int]], list[int], str]:
-    input_file = f"{home}/neo-data/tokens/{dataset_name}-{config['model']}.json"
+    input_file = f"{cur_dir}/{dataset_name}-{config['model']}.json"
     with open(input_file, "r") as f:
-        datas = json.load(f)[:2000]
-        prompts = [data["prompt"] for data in datas]
+        datas = json.load(f)
+        prompts = [[10] * data["prompt"] for data in datas]
         output_lens = [data["max_tokens"] for data in datas]
         
     res_file = f"{res_dir}/{server_name}-{dataset_name}"
     return prompts, output_lens, res_file
-
-
-async def one_round(name: str):
-    global server_name
-    server_name = name
-    start_server(server_name)
-    # if name == "ours":
-    #     await run_test(*prepare_real_test("arxiv"), 0.18)
-    #     await run_test(*prepare_real_test("arxiv"), 0.20)
-    #     await run_test(*prepare_real_test("arxiv"), 0.22)
-    await run_test(*prepare_real_test("azure_code"))
-    # await run_test(*prepare_real_test("azure_code"), 2.8)
-    # await run_test(*prepare_real_test("azure_code"), 2.9)
-    # await run_test(*prepare_mock_test(2000, 1000, 75))
-    # await run_test(*prepare_mock_test(2000, 500, 25))
-    # await run_test(*prepare_mock_test(2000, 500, 75))
-    # await run_test(*prepare_mock_test(2000, 2000, 100))
-    # await run_test(*prepare_mock_test(2000, 2000, 200))
-    stop_server()
-    await asyncio.sleep(10)
-
-
-async def main():
-    await one_round("ours")
-    # await one_round("vllm")
-    # await one_round("base")
-    # await one_round("fsdc")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
     

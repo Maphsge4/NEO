@@ -170,4 +170,3 @@ cython_debug/
 
 # NEO profile results
 profile_results/
-*.json

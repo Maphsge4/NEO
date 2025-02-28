@@ -1,0 +1,402 @@
+[
+    {
+        "prompt": 269,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 270,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 349,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 270,
+        "max_tokens": 60
+    },
+    {
+        "prompt": 245,
+        "max_tokens": 33
+    },
+    {
+        "prompt": 224,
+        "max_tokens": 45
+    },
+    {
+        "prompt": 459,
+        "max_tokens": 47
+    },
+    {
+        "prompt": 405,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 491,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 508,
+        "max_tokens": 43
+    },
+    {
+        "prompt": 402,
+        "max_tokens": 41
+    },
+    {
+        "prompt": 279,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 554,
+        "max_tokens": 35
+    },
+    {
+        "prompt": 555,
+        "max_tokens": 43
+    },
+    {
+        "prompt": 359,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 363,
+        "max_tokens": 36
+    },
+    {
+        "prompt": 336,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 385,
+        "max_tokens": 32
+    },
+    {
+        "prompt": 372,
+        "max_tokens": 47
+    },
+    {
+        "prompt": 468,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 412,
+        "max_tokens": 47
+    },
+    {
+        "prompt": 452,
+        "max_tokens": 33
+    },
+    {
+        "prompt": 387,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 268,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 452,
+        "max_tokens": 56
+    },
+    {
+        "prompt": 512,
+        "max_tokens": 60
+    },
+    {
+        "prompt": 345,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 353,
+        "max_tokens": 40
+    },
+    {
+        "prompt": 297,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 213,
+        "max_tokens": 34
+    },
+    {
+        "prompt": 383,
+        "max_tokens": 66
+    },
+    {
+        "prompt": 453,
+        "max_tokens": 60
+    },
+    {
+        "prompt": 243,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 511,
+        "max_tokens": 57
+    },
+    {
+        "prompt": 400,
+        "max_tokens": 64
+    },
+    {
+        "prompt": 425,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 437,
+        "max_tokens": 43
+    },
+    {
+        "prompt": 499,
+        "max_tokens": 43
+    },
+    {
+        "prompt": 243,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 452,
+        "max_tokens": 45
+    },
+    {
+        "prompt": 355,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 348,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 296,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 263,
+        "max_tokens": 53
+    },
+    {
+        "prompt": 392,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 387,
+        "max_tokens": 45
+    },
+    {
+        "prompt": 454,
+        "max_tokens": 52
+    },
+    {
+        "prompt": 318,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 218,
+        "max_tokens": 29
+    },
+    {
+        "prompt": 505,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 349,
+        "max_tokens": 58
+    },
+    {
+        "prompt": 265,
+        "max_tokens": 57
+    },
+    {
+        "prompt": 532,
+        "max_tokens": 43
+    },
+    {
+        "prompt": 529,
+        "max_tokens": 53
+    },
+    {
+        "prompt": 522,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 523,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 310,
+        "max_tokens": 34
+    },
+    {
+        "prompt": 380,
+        "max_tokens": 62
+    },
+    {
+        "prompt": 309,
+        "max_tokens": 74
+    },
+    {
+        "prompt": 459,
+        "max_tokens": 59
+    },
+    {
+        "prompt": 434,
+        "max_tokens": 53
+    },
+    {
+        "prompt": 474,
+        "max_tokens": 53
+    },
+    {
+        "prompt": 267,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 308,
+        "max_tokens": 35
+    },
+    {
+        "prompt": 554,
+        "max_tokens": 46
+    },
+    {
+        "prompt": 284,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 298,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 391,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 197,
+        "max_tokens": 32
+    },
+    {
+        "prompt": 365,
+        "max_tokens": 31
+    },
+    {
+        "prompt": 295,
+        "max_tokens": 32
+    },
+    {
+        "prompt": 342,
+        "max_tokens": 59
+    },
+    {
+        "prompt": 538,
+        "max_tokens": 34
+    },
+    {
+        "prompt": 492,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 276,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 493,
+        "max_tokens": 55
+    },
+    {
+        "prompt": 483,
+        "max_tokens": 44
+    },
+    {
+        "prompt": 310,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 321,
+        "max_tokens": 51
+    },
+    {
+        "prompt": 422,
+        "max_tokens": 37
+    },
+    {
+        "prompt": 279,
+        "max_tokens": 50
+    },
+    {
+        "prompt": 255,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 498,
+        "max_tokens": 48
+    },
+    {
+        "prompt": 262,
+        "max_tokens": 33
+    },
+    {
+        "prompt": 232,
+        "max_tokens": 40
+    },
+    {
+        "prompt": 366,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 363,
+        "max_tokens": 49
+    },
+    {
+        "prompt": 288,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 292,
+        "max_tokens": 58
+    },
+    {
+        "prompt": 400,
+        "max_tokens": 39
+    },
+    {
+        "prompt": 516,
+        "max_tokens": 45
+    },
+    {
+        "prompt": 312,
+        "max_tokens": 59
+    },
+    {
+        "prompt": 494,
+        "max_tokens": 56
+    },
+    {
+        "prompt": 246,
+        "max_tokens": 40
+    },
+    {
+        "prompt": 436,
+        "max_tokens": 46
+    },
+    {
+        "prompt": 500,
+        "max_tokens": 53
+    },
+    {
+        "prompt": 430,
+        "max_tokens": 25
+    },
+    {
+        "prompt": 279,
+        "max_tokens": 38
+    },
+    {
+        "prompt": 432,
+        "max_tokens": 42
+    },
+    {
+        "prompt": 470,
+        "max_tokens": 50
+    }
+]
