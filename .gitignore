@@ -170,3 +170,6 @@ cython_debug/
 
 # NEO profile results
 profile_results/
+
+# NEO evaluation results
+evaluation/results/

@@ -1,5 +1,6 @@
 {
     "model": "Llama-2-7b-hf",
+    "model_path": "/home/ubuntu/weights/Llama-2-7b-hf",
     "num_layers": 32,
     "block_size": 16,
     "max_model_len": 832,

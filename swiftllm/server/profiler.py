@@ -120,15 +120,11 @@ class ModelProfiler:
         else: 
             args = self.bm.prepare(batches, [], [])
                   
-        start = 0.0
         for i in range(-nwarmup, nrepeat):
             if i == 0:
-                start = time.perf_counter()
                 self.executor.turn_on_perf_monitor()
             # Directly call this since we already allocated the blocks
             output_tokens = self.executor.do_one_iteration(batches, *args)
-        elapsed = time.perf_counter() - start
-        print(f"Elapsed time: {elapsed * 1000 / nrepeat:.3f} ms")
 
         if self.bm is not None:
             # The requests would all finish due to quick-stop.
