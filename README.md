@@ -6,7 +6,8 @@ NEO is an online LLM inference system that offloads part of attention compute an
 
 ## Requirements
 
-PyTorch >= 3.9
+Python >= 3.10
+PyTorch >= 2.4
 
 2 versions of g++ (see `pacpu/build.sh` for more details):
 
