@@ -93,13 +93,14 @@ def prepare_mock_test(
     nreqs: int,
     input_len: int,
     output_len: int,
-    server_name: str
+    server_name: str,
+    config: dict
 ) -> tuple[list[list[int]], list[int], str]:
     input_lens = _get_rand_array(nreqs, input_len, 0.1)
     output_lens = _get_rand_array(nreqs, output_len, 0.1)
     prompts = [[10] * input_len for input_len in input_lens]
     res_file = f"{res_dir}/{server_name}-{nreqs}-{input_len}-{output_len}"
-    return prompts, output_lens, res_file
+    return prompts, output_lens, res_file, config['model_path']
 
 
 def prepare_real_test(

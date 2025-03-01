@@ -1,10 +1,8 @@
 import os
 import sys
-import json
 import subprocess
 import time
 import logging
-import argparse
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 neo_dir = os.path.dirname(cur_dir)
@@ -23,7 +21,6 @@ def start_server(name: str, config: dict):
     numacmd = ["numactl", "-N", "0", "-m", "0"]
     with open(f"{cur_dir}/{name}-server.log", "w") as f:
         if name[:4] == "vllm":
-            wait_time_intvs = 10
             chunk_size_str = name[4:] if name != "vllm" else str(config["num_gpu_blocks_override"] * config["block_size"])
             max_num_seqs = min(int(chunk_size_str), config["max_num_seqs"])
             server_proc = subprocess.Popen(
@@ -93,11 +90,11 @@ def start_server(name: str, config: dict):
         else:
             raise ValueError(f"Unknown server name: {name}")
         
-        # Check the server log every 2s, until the starting keyword is found
+        # Check the server log every 5s, until the starting keyword is found
         time_counter = 0
         while True:
-            time.sleep(2)
-            time_counter += 2
+            time.sleep(5)
+            time_counter += 5
             logger.info(f"{time_counter}s elapsed, checking server log ...")
             with open(f"{cur_dir}/{name}-server.log", "r") as f:
                 if "Started server process" in f.read():
@@ -114,14 +111,3 @@ def stop_server():
     assert server_proc is not None, "Server not started"
     server_proc.terminate()
     logger.info("Server stopped")
-
-
-if __name__ == "__main__":
-    # parse server name from command line
-    parser = argparse.ArgumentParser()
-    parser.add_argument("server_name", type=str, help="Server name")
-    args = parser.parse_args()
-
-    start_server(args.server_name)
-    input("Press Enter to stop the server ...")
-    stop_server()
