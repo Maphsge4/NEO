@@ -9,6 +9,6 @@
     "tensor_parallel_size": 1,
     "gpu_memory_utilization": 0.99,
     "num_gpu_blocks_override": 1650,
-    "swap_space": 30,
+    "swap_space": 120,
     "library": "libpacpu-llama3_8b-tp1.so"
 }
