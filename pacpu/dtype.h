@@ -43,5 +43,5 @@ typedef float otpt_t;
 
 #define MAX_BATCH_SIZE 4096
 #define MAX_WS 256
-#define MAX_TOK_NUM 524288 // Maxinum number of token's KV to be scanned in one iteration
+#define MAX_TOK_NUM 1048576 // Maxinum number of token's KV to be scanned in one iteration
 #define MAX_TASK_NUM (MAX_BATCH_SIZE + MAX_WS)
