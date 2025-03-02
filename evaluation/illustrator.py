@@ -15,7 +15,6 @@ def get_lat_avg(file):
 
 def draw_one_rl_diagram(
     title: str,
-    gpu_name: str, 
     data_name: str,
     sys_file_names: list[str],
     sys_legend_names: list[str],
@@ -30,7 +29,7 @@ def draw_one_rl_diagram(
         lats.append([])
         for rate in rate_list:
             rate_str = str(rate).replace(".", "_")
-            lats[-1].append(get_lat_avg(f"{gpu_name}/{sys_file_name}-{data_name}-lat-{rate_str}.json"))
+            lats[-1].append(get_lat_avg(f"{cur_dir}/results/{sys_file_name}-{data_name}-lat-{rate_str}.json"))
 
     # ax.set_title(title, y=-0.3, fontsize="x-large")
 
@@ -50,7 +49,7 @@ def draw_one_rl_diagram(
     ax.grid(True)
     handles, labels = ax.get_legend_handles_labels()
     ax.legend()
-    plt.savefig(f"{title}.pdf", bbox_inches='tight')
+    plt.savefig(f"{cur_dir}/{title}.pdf", bbox_inches='tight')
     return handles, labels
 
 

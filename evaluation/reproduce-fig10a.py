@@ -1,3 +1,13 @@
+"""
+Reproduction script for Figure 10a in the paper.
+
+Please note that this script should be run on g5.x16large instances, and only the corresponding line
+is drew in the figure. 
+
+The full test takes a long time (~5h) to run. You can reduce the number of requests or number of data
+points to speed up the evaluation process.
+"""
+
 import asyncio
 import json
 import os
@@ -11,12 +21,13 @@ from illustrator import draw_one_ps_diagram
 
 num_data = 2000
 # Number of total request send to the serving engine, reduce this number to speed up the evaluation process. 
-# However, the result may not be as accurate as the original one due to warm-up and cool-down effects.
+# However, the result may not be as accurate as the original one due to warm-up and cool-down effects. It is 
+# not recommended to set this number below 800.
 
 input_len = 1000
 # Length of input sequence, please keep it as 1000 to reproduce the original result.
 
-output_lens = [50, 100, 200, 300, 400][:2] 
+output_lens = [50, 100, 200, 300, 400]
 # Length of output sequence, reduce the number of elements in the list to speed up the evaluation process.
 
 
@@ -41,11 +52,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    # asyncio.run(main())
+    asyncio.run(main())
     draw_one_ps_diagram(
-        title="cpu-sensitivity",
+        title="fig10a",
         base_sys_name="base",
-        interv=[0.3, 0.7],
+        interv=[0.3, 0.7], # The interval for calculating throughput, we ignore the first 30% and last 30% of the data in order to avoid warm-up and cool-down effects.
         num_datas=[num_data],
         sys_file_names=["ours"],
         legend_names=["x16large"],

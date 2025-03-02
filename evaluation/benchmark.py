@@ -110,7 +110,8 @@ def prepare_real_test(
 ) -> tuple[list[list[int]], list[int], str]:
     input_file = f"{cur_dir}/data/{dataset_name}-{config['model']}.json"
     with open(input_file, "r") as f:
-        datas = json.load(f)
+        # Remove the [:100] to use the full dataset. However, it may take a long time (~10h) to run the full test of fig6c.
+        datas = json.load(f)[:100]
         prompts = [[10] * data["prompt"] for data in datas]
         output_lens = [data["max_tokens"] for data in datas]
         
