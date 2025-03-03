@@ -35,9 +35,7 @@ Intel ISPC compiler == 1.23, which can be installed by `sudo snap install ispc -
    cd ..
    ```
 
-## Usage
-
-### Offline Example
+## Offline Example
 
 ```bash
 cd NEO
@@ -51,7 +49,7 @@ Run `python examples/example.py --help` to see more options.
 
 ### Load-latency Curves
 
-The figure below illustrates online latencies of NEO and other baselines under different request rates.
+The figure below (Figure 6c in the paper) shows online latencies of NEO and other baselines under different request rates.
 
 vLLM-256 and vLLM-512 designate vLLM with chunked-prefilling at the chunk size of 256 and 512 tokens, respectively.
 
@@ -63,7 +61,7 @@ vLLM-256 and vLLM-512 designate vLLM with chunked-prefilling at the chunk size o
 
 ### Generation Throughput
 
-The figure below shows NEO's throughput gains over the non-CPU-offloading baseline under different workloads. NEO achieves up to 12.2%, 13.3%, 29.7%, and 79.3% higher throughput over the baseline under different CPU capacities.
+The figure below (Figure 10a in the paper) shows NEO's throughput gains over the non-CPU-offloading baseline under different workloads. NEO achieves up to 12.2%, 13.3%, 29.7%, and 79.3% higher throughput over the baseline under different CPU capacities.
 
 ![image-20250221101309717](docs/cpu-sensitivity.png)
 
@@ -71,3 +69,33 @@ The figure below shows NEO's throughput gains over the non-CPU-offloading baseli
 - Model: LLaMa-3-8B
 - Workload: Synthetic workloads with various input and output lengths. For a pair of input length $l_i$ and output length $l_o$, we synthesize requests with input and output lengths sampled independently and uniformly from $[0.9l_i, 1.1l_i]$ and $[0.9l_o, 1.1l_o]$, respectively. Here we fix $l_i=1000$ and pick $l_o$ from $\{50, 100, 200, 300, 400\}$.
 
+## Reproduction
+
+Below are instructions for reproducing Figure 6c in the paper. Instructions for Figure 10a are the same except for specific details noted in parentheses.
+
+### With an AWS Account
+
+1. Launch a g4dn.4xlarge (g5.16xlarge) instance in us-east-1 region with community AMI neo-ae-g4-image (neo-ae-g5-image).
+2. SSH to the instance and run `mamba activate neo` in the shell.
+3. run `cd NEO`
+4. run `python evaluation/reproduce-fig6c.py`(`python evaluation/reproduce-fig10a.py`)
+
+### Without an AWS Account
+
+1. Prepare a machine with 
+   - Nvidia Tesla T4 (A10G) GPU;
+   - CPU with AVX2 support;
+   - At least 30GB (120GB) main memory for CPU KV Cache.
+   - Ubuntu >= 22.04
+2. Follow the steps in the Installation section to install dependencies.
+3. Download LLaMa-2-7B (LLaMa-3-8B) model weights.
+4. Modify `model_path` entry in `evaluation/configs/config-t4-7b.json` ( `evaluation/configs/config-a10-8b.json`) to the actual path to the model weights.
+5. run `python evaluation/reproduce-fig6c.py`(`python evaluation/reproduce-fig10a.py`) in top level directory of the NEO repository.
+
+### Expected Results
+
+- The reproduced figure fig6c.pdf (fig10a.pdf) will be produced in `evaluation` directory.
+- For Figure 6c, there will be only 2 lines (Neo and vLLM). By default the script only uses a small subset (100 requests) of the original input data (2000 requests) used in the original experiment. This is for the purpose of demonstration and quick verification of the results for faster evaluation. As a result, the latency would be lower than the original figure due to less average queuing latency.
+- For Figure 10a, only 2 lines (x16large and baseline) in the original figure will be drawn.
+
+> NOTE: You can change the hyperparameters of the experiments by modifying the corresponding scripts. Please refer to comments in the code for detailed instructions.
