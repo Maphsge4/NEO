@@ -80,6 +80,21 @@ Below are instructions for reproducing Figure 6c in the paper. Instructions for 
 3. run `cd NEO`
 4. run `python evaluation/reproduce-fig6c.py`(`python evaluation/reproduce-fig10a.py`)
 
+> NOTE: Although the model weights are pre-packaged in the images, the first time loading them would take about 1 hour. Therefore, it is recommended to download the weights from the internet and replace those embedded in  the image, which usually takes less than 10 min. The following script can be used to retrieve the weights from Huggingface:
+>
+> ```bash
+> cd ~
+> rm -r weights/*
+> ip install 'huggingface_hub[cli]' 
+> huggingface-cli login --token <your huggingface token>
+> # For g5 instance:
+> huggingface-cli download meta-llama/Llama-3.1-8B --local-dir weights/Llama-3-8B --exclude "*.pth"
+> # For g4 instance:
+> huggingface-cli download meta-llama/Llama-2-7b-hf --local-dir weights/Llama-2-7b-hf --exclude "*.pth"
+> ```
+>
+> Alternatively, you may use the pre-packaged weights within the image. It is possible to encounter timeout issues during the initial execution of the evaluation script due to prolonged loading times. If this occurs, simply rerunning the script should resolve the issue.
+
 ### Without an AWS Account
 
 1. Prepare a machine with 
@@ -88,7 +103,7 @@ Below are instructions for reproducing Figure 6c in the paper. Instructions for 
    - At least 30GB (120GB) main memory for CPU KV Cache.
    - Ubuntu >= 22.04
 2. Follow the steps in the Installation section to install dependencies.
-3. Download LLaMa-2-7B (LLaMa-3-8B) model weights.
+3. Download LLaMa-2-7B (LLaMa-3-8B) model weights. You can refer to the NOTE above for weight retrieving scripts.
 4. Modify `model_path` entry in `evaluation/configs/config-t4-7b.json` ( `evaluation/configs/config-a10-8b.json`) to the actual path to the model weights.
 5. run `python evaluation/reproduce-fig6c.py`(`python evaluation/reproduce-fig10a.py`) in top level directory of the NEO repository.
 
