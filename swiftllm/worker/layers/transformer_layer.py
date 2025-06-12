@@ -203,6 +203,7 @@ class LlamaTransformerLayer:
         layer_off: int = 0
     ) -> tuple[torch.Tensor]:
         """
+        待研究
         Perform pre-projection, including RMSNorm, QKV calculation, and rotary embedding
         """
         weight = self.weight if not layer_off else self.next_layer_weight
@@ -264,6 +265,7 @@ class LlamaTransformerLayer:
         cur_stage: int = 0 # also as the offset of layer_id
     ):
         """
+        attention的计算可能有g有c, 在batch0中
         Stores attention output of current batch into buffer o
         """
 
@@ -415,7 +417,7 @@ class LlamaTransformerLayer:
         """
         self.events[cur_stage].pf_record("stage_s")
         self.events[cur_stage].pf_time("lnch_s")
-        self._transfer_qkv(q1, k1, v1, batches[cur_stage^1], cur_stage=cur_stage)
+        self._transfer_qkv(q1, k1, v1, batches[cur_stage^1], cur_stage=cur_stage)  # qkv1 -> CPU, then ca1
         self._swap_out_blocks(batches[cur_stage])
         e0 = self._postproj(batches[cur_stage])
         q0, k0, v0 = self._preproj(e0, batches[cur_stage], layer_off=1)
@@ -442,6 +444,8 @@ class LlamaTransformerLayer:
             batch 0 : o0   |=>  post-projection[i] -> pre-projection[i+1]  |        attention[i+1]                     |=> [o0']
             batch 1 : qkv1 |=>       attention[i]                          | post-projection[i] -> pre-projection[i+1] |=> qkv1'
         """
+        # 一个Figure 5的方块包含了如下的两个_forward_pipeline_stage
+        # 每一个都是：算po0, 算pr0, 算ca1（且可能存在ga1）
         q0, k0, v0 = self._forward_pipeline_stage(q1, k1, v1, batches, cur_stage=0)
         q1, k1, v1 = self._forward_pipeline_stage(q0, k0, v0, batches, cur_stage=1)
 
@@ -454,6 +458,7 @@ class LlamaTransformerLayer:
         batches: list[SubBatch]
     ) -> tuple[torch.Tensor]:
         """
+        Figure 5 方框之前的部分
         Do the first stage of the pipeline for 2 batches
 
         batch0 : embeddings0 |=> pre-projection -> attention       |=> [o0]
@@ -482,6 +487,7 @@ class LlamaTransformerLayer:
         batches: list[SubBatch]
     ) -> torch.Tensor:
         """
+        Figure 5 方框之后部分
         Do the last stage of the pipeline for 2 batches, return the concatenated output
 
         batch0 : o0   |=> post-projection              |=> [f0]

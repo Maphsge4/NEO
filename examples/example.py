@@ -87,7 +87,7 @@ if __name__ == '__main__':
         use_dummy = False,
 
         block_size = 16,
-        gpu_mem_utilization = 0.99,
+        gpu_mem_utilization = 0.8,
         num_gpu_blocks_override = args.num_gpu_blocks,
         swap_space = args.swap_space,
         max_seqs_in_block_table = 10,
