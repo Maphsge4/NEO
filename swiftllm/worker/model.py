@@ -157,7 +157,8 @@ class LlamaModel:
             model_config,
             torch.float16,
             engine_config.model_path,
-            engine_config.use_dummy
+            engine_config.use_dummy,
+            False
         )
 
         # Initialize buffers
@@ -177,7 +178,6 @@ class LlamaModel:
             for layer_id in range(self.model_config.num_layers)
         ]
         self.post_layer = LlamaPostLayer(self.model_config, self.weight)
-
         # Initialize rotary embeddings
         self.cos_cached = None
         self.sin_cached = None
@@ -269,8 +269,13 @@ class LlamaModel:
         # Wait for swappings to finish
         torch.cuda.current_stream().wait_stream(self.cpu_communication_stream)
         self.events.pf_record("mnbd_s")
-        for layer in self.transformer_layers:
-            embeddings = layer.forward(batch, embeddings)
+        if True:
+            embeddings = self.transformer_layers.forward(
+                batch=batch, 
+                embeddings=embeddings)
+        else:
+            for layer in self.transformer_layers:
+                embeddings = layer.forward(batch, embeddings)
         self.events.pf_record("mnbd_e")
         return embeddings
 
@@ -281,16 +286,19 @@ class LlamaModel:
         """
         assert len(batches) == 2
 
-        q1, k1, v1 = self.transformer_layers[-1].forward_first_stage(embeddings, batches)
-        self.events.pf_record("mnbd_s")
+        if True:
+            embeddings = self.transformer_layers.forward_pipeline(embeddings, batches)
+        else:
+            q1, k1, v1 = self.transformer_layers[-1].forward_first_stage(embeddings, batches)
+            self.events.pf_record("mnbd_s")
 
-        # In every iteration, attn_out_buf[0] is updated to newer version of batch 0's attention output and 
-        # q1, k1, v1 are updated to batch 1's newer version of q, k, v
-        for layer in self.transformer_layers[:-1]:
-            q1, k1, v1 = layer.forward_double(q1, k1, v1, batches)
-        self.events.pf_record("mnbd_e")
+            # In every iteration, attn_out_buf[0] is updated to newer version of batch 0's attention output and 
+            # q1, k1, v1 are updated to batch 1's newer version of q, k, v
+            for layer in self.transformer_layers[:-1]:
+                q1, k1, v1 = layer.forward_double(q1, k1, v1, batches)
+            self.events.pf_record("mnbd_e")
 
-        embeddings = self.transformer_layers[-1].forward_last_stage(q1, k1, v1, batches)
+            embeddings = self.transformer_layers[-1].forward_last_stage(q1, k1, v1, batches)
         return embeddings
     
     

@@ -7,6 +7,7 @@ Note that this script is for demonstration purposes only and uses symmetric pipe
 """
 import os
 import time
+import torch
 import argparse
 from transformers import AutoTokenizer
 
@@ -107,6 +108,24 @@ if __name__ == '__main__':
     engine = swiftllm.Engine(engine_config)
     engine.initialize()
     print(f"Engine creation time: {time.perf_counter() - start_time:.2f} seconds")
+
+    from swiftllm.worker.my_offload import OffloadModel
+    engine.executor.model.transformer_layers = OffloadModel(
+        name='neo',
+        model=engine.executor.model.transformer_layers,
+        mode="select",
+        device=torch.device("cuda"),  # computation device
+        offload_device=torch.device("cpu"),  # offload device
+        # num_slices=40, # currently not used
+        checkpoint_activation=False,
+        num_microbatches=1,
+        # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
+        device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+        # device_list=eval("[1, 0] * 16 ") 
+    )
+    for i, m in enumerate(engine.executor.model.transformer_layers.model_slices):
+        if engine.executor.model.transformer_layers.device_list[i] == 1:
+            engine.executor.model.transformer_layers.model_slices[i].forward_load()
     
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)

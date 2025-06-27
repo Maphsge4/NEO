@@ -49,7 +49,7 @@ class WeightBase:
         """
         raise NotImplementedError()
     
-    def load_weights(self, getter: callable):
+    def load_weights(self, getter: callable, cpu_only: bool = False):
         """
         Load weights
         """
@@ -62,12 +62,14 @@ class WeightBase:
             ), f"Cannot split tensor {item.attr_name} with shape {item.shape} into {ws} parts"
 
             weight_value = getter(item)
+            if cpu_only:
+                weight_value = weight_value.to("cpu").pin_memory()
 
             assert weight_value is not None, f"getter() returned None for {item.key} ({item})"
             assert isinstance(weight_value, torch.Tensor), f"Weight {item.key} is not a tensor"
             assert weight_value.shape == item.get_real_shape(ws), \
                 f"Shape of weight {item.key} does not match {weight_value.shape} != {item.get_real_shape(ws)}"
-            assert weight_value.device.type == "cuda", f"Weight {item.key} is not on GPU"
+            # assert weight_value.device.type == "cuda", f"Weight {item.key} is not on GPU"
             setattr(self, item.attr_name, weight_value.to(item.dtype))
         self._post_process_after_load(getter)
 
@@ -166,9 +168,12 @@ class LlamaWeight(WeightBase):
     def __init__(
         self,
         model_config: LlamaModelConfig,
-        dtype: torch.dtype
+        dtype: torch.dtype,
+        load_layers: bool = True
     ):
         super().__init__(model_config, dtype)
+        self.load_layers = load_layers
+        self._getter = None  # 用于后续加载层权重
 
         self.register_weight(RegisteredWeightItem(
             "wte",
@@ -198,8 +203,24 @@ class LlamaWeight(WeightBase):
             self.layers.append(layer)
 
     def _post_process_after_load(self, getter: callable):
-        for layer in self.layers:
-            layer.load_weights(getter)
+        # 只有在 load_layers 为 True 时才加载层权重
+        if self.load_layers:
+            for layer in self.layers:
+                layer.load_weights(getter)
+        else:
+            for layer in self.layers:
+                layer.load_weights(getter, cpu_only=True)  # 如果不加载层权重，则只加载到 CPU 上
+    
+    def load_layer_weight(self, getter: callable, layer_index: int):
+        """
+        加载单个层的权重
+        
+        Args:
+            getter: 权重获取函数
+            layer_index: 层索引
+        """
+        if 0 <= layer_index < len(self.layers):
+            self.layers[layer_index].load_weights(getter)
 
 
 
@@ -207,7 +228,8 @@ def load_weights(
     model_config: LlamaModelConfig,
     dtype: torch.dtype,
     model_path: str,
-    use_dummy: bool = False
+    use_dummy: bool = False,
+    load_layers: bool = True  # 新增参数
 ) -> LlamaWeight:
     """
     Load weights from a given path
@@ -278,6 +300,11 @@ def load_weights(
                 return file[item.key].to(item.dtype)
             getter = weight_getter_real
 
-    weight = LlamaWeight(model_config, dtype)
-    weight.load_weights(getter)
+    weight = LlamaWeight(model_config, dtype, load_layers=load_layers)
+    weight.load_weights(getter)  # 这一步真正占用显存
+
+    # weight._getter = getter  # 保存getter以便后续加载层权重
+
+    # weight.load_layer_weight(weight._getter, layer_index=0)  # 默认加载第0层权重
+    # weight.load_layer_weight(weight._getter, layer_index=1)  # 默认加载第0层权重
     return weight
