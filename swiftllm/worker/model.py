@@ -132,7 +132,8 @@ class LlamaModel:
         self,
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
-        rank: int
+        rank: int,
+        framework: str
     ):
         """
         Initialize the LlamaModel.
@@ -158,7 +159,7 @@ class LlamaModel:
             torch.float16,
             engine_config.model_path,
             engine_config.use_dummy,
-            False
+            True if framework == "neo" else False
         )
 
         # Initialize buffers
@@ -261,7 +262,7 @@ class LlamaModel:
         self.buffer.alloc_for_batches(batches)
 
 
-    def _forward_sequential(self, batch: SubBatch, embeddings: torch.Tensor) -> torch.Tensor:
+    def _forward_sequential(self, batch: SubBatch, embeddings: torch.Tensor, framework: str) -> torch.Tensor:
         """
         Run a forward pass of the transformer layers in a sequential manner.
 
@@ -269,26 +270,26 @@ class LlamaModel:
         # Wait for swappings to finish
         torch.cuda.current_stream().wait_stream(self.cpu_communication_stream)
         self.events.pf_record("mnbd_s")
-        if True:
+        if framework == "flexgen" or framework == "select":
             embeddings = self.transformer_layers.forward(
                 batch=batch, 
                 embeddings=embeddings)
-        else:
+        elif framework == "neo":
             for layer in self.transformer_layers:
                 embeddings = layer.forward(batch, embeddings)
         self.events.pf_record("mnbd_e")
         return embeddings
 
 
-    def _forward_pipeline(self, batches: list[SubBatch], embeddings: torch.Tensor) -> torch.Tensor:
+    def _forward_pipeline(self, batches: list[SubBatch], embeddings: torch.Tensor, framework: str) -> torch.Tensor:
         """
         Run a forward pass of the transformer layers in a pipelined manner.
         """
         assert len(batches) == 2
 
-        if True:
+        if framework == "flexgen" or framework == "select":
             embeddings = self.transformer_layers.forward_pipeline(embeddings, batches)
-        else:
+        elif framework == "neo":
             q1, k1, v1 = self.transformer_layers[-1].forward_first_stage(embeddings, batches)
             self.events.pf_record("mnbd_s")
 
@@ -303,7 +304,7 @@ class LlamaModel:
     
     
     @torch.inference_mode()
-    def _forward_batches(self, batches: list[SubBatch]) -> list[int]:
+    def _forward_batches(self, batches: list[SubBatch], framework: str) -> list[int]:
         """
         Run a forward pass of the LlamaModel.
 
@@ -320,9 +321,9 @@ class LlamaModel:
         self.events.pf_record("fstg_s")
 
         if len(batches) == 1:
-            embeddings = self._forward_sequential(batches[0], embeddings)
+            embeddings = self._forward_sequential(batches[0], embeddings, framework)
         elif len(batches) == 2:
-            embeddings =  self._forward_pipeline(batches, embeddings)
+            embeddings =  self._forward_pipeline(batches, embeddings, framework)
         else:
             raise ValueError("Invalid number of batches")
         self.events.pf_record("lstg_e")
@@ -341,6 +342,7 @@ class LlamaModel:
     def do_one_iteration(
         self,
         batches: list[SubBatch],
+        framework: str,
         mappings: tuple[tuple[list[int], list[int]], tuple[list[int], list[int]]],
         swappings: tuple[list[int], list[int]],
         is_swap_out: bool = False
@@ -362,7 +364,7 @@ class LlamaModel:
                 for layer_id in range(self.model_config.num_layers):
                     self.swapper.swap_blocks(*swappings, is_swap_out, layer_id, layer_id)
 
-        return self._forward_batches(batches)
+        return self._forward_batches(batches, framework)
     
 
     def turn_on_perf_monitor(self):

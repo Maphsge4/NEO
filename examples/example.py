@@ -79,9 +79,16 @@ if __name__ == '__main__':
         action="store_true",
         default=False
     )
+    parser.add_argument(
+        "--framework",
+        type=str,
+        choices=["flexgen", "neo", "select"],
+        default="select"
+    )
     args = parser.parse_args()
 
-    
+    framework = args.framework
+
     # 1. Create the engine
     engine_config = swiftllm.EngineConfig(
         model_path = args.model_path,
@@ -106,26 +113,27 @@ if __name__ == '__main__':
 
     start_time = time.perf_counter()
     engine = swiftllm.Engine(engine_config)
-    engine.initialize()
+    engine.initialize(framework)
     print(f"Engine creation time: {time.perf_counter() - start_time:.2f} seconds")
 
-    from swiftllm.worker.my_offload import OffloadModel
-    engine.executor.model.transformer_layers = OffloadModel(
-        name='neo',
-        model=engine.executor.model.transformer_layers,
-        mode="select",
-        device=torch.device("cuda"),  # computation device
-        offload_device=torch.device("cpu"),  # offload device
-        # num_slices=40, # currently not used
-        checkpoint_activation=False,
-        num_microbatches=1,
-        # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
-        device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
-        # device_list=eval("[1, 0] * 16 ") 
-    )
-    for i, m in enumerate(engine.executor.model.transformer_layers.model_slices):
-        if engine.executor.model.transformer_layers.device_list[i] == 1:
-            engine.executor.model.transformer_layers.model_slices[i].forward_load()
+    if framework == "select" or framework == "flexgen":
+        from swiftllm.worker.my_offload import OffloadModel
+        engine.executor.model.transformer_layers = OffloadModel(
+            name='neo',
+            model=engine.executor.model.transformer_layers,
+            mode="select",
+            device=torch.device("cuda"),  # computation device
+            offload_device=torch.device("cpu"),  # offload device
+            # num_slices=40, # currently not used
+            checkpoint_activation=False,
+            num_microbatches=1,
+            # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
+            device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+            # device_list=eval("[1, 0] * 16 ") 
+        )
+        for i, m in enumerate(engine.executor.model.transformer_layers.model_slices):
+            if engine.executor.model.transformer_layers.device_list[i] == 1:
+                engine.executor.model.transformer_layers.model_slices[i].forward_load()
     
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
@@ -145,6 +153,8 @@ if __name__ == '__main__':
     # 3. Prefill the prompts
     reqs = [None] * nprompts
     gpu_req_ids = list(range(ngpu_prompts // 2)) + list(range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2))
+    if len(gpu_req_ids) == 0:  # FlexGen
+        gpu_req_ids = [0]
     gpu_reqs = []
     if ngpu_prompts:
         batch = swiftllm.SubBatch()
@@ -152,20 +162,20 @@ if __name__ == '__main__':
             reqs[i] = swiftllm.create_request(input_ids, i)
             batch.add_pref(reqs[i], is_gpu=True)
         gpu_reqs = [reqs[i] for i in gpu_req_ids]
-        engine.step([batch])
+        engine.step([batch], framework=framework)
 
     if ncpu_prompts:
         batch = swiftllm.SubBatch()
         for i in range(ngpu_prompts // 2, nprompts // 2):
             reqs[i] = swiftllm.create_request(input_ids, i)
             batch.add_pref(reqs[i], is_gpu=False)
-        engine.step([batch])
+        engine.step([batch], framework=framework)
 
         batch = swiftllm.SubBatch()
         for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
             reqs[i] = swiftllm.create_request(input_ids, i)
             batch.add_pref(reqs[i], is_gpu=False)
-        engine.step([batch])
+        engine.step([batch], framework=framework)
 
     print("Prefilling phase done")
 
@@ -175,7 +185,10 @@ if __name__ == '__main__':
         engine.executor.turn_on_perf_monitor()
     
     for iteration in range(16):
-        batches = [swiftllm.SubBatch() for _ in range(2)]
+        if ngpu_prompts // 2 == 0:  # FlexGen
+            batches = [swiftllm.SubBatch()]
+        else:
+            batches = [swiftllm.SubBatch() for _ in range(2)]
         for i in range(ngpu_prompts // 2):
             batches[0].add_gdec(reqs[i])
         for i in range(ngpu_prompts // 2, nprompts // 2):
@@ -184,6 +197,8 @@ if __name__ == '__main__':
             batches[1].add_gdec(reqs[i])
         for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
             batches[0].add_cdec(reqs[i])
+        if ngpu_prompts // 2 == 0:  # FlexGen
+            batches[0].add_gdec(reqs[i])
             
         # Un-comment the following 4 lines to run mixed batches
         # reqs.append(swiftllm.create_request(input_ids, len(reqs)))
@@ -192,7 +207,7 @@ if __name__ == '__main__':
         # batches[1].add_pref(reqs[-1], is_gpu=False)
 
         start = time.perf_counter()
-        engine.step(batches)
+        engine.step(batches, framework=framework)
         end = time.perf_counter()
         print(f"Iteration {iteration:3} E2E time: {(end - start) * 1000:.4f} ms")
     

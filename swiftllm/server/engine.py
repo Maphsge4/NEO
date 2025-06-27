@@ -46,12 +46,12 @@ class Engine:
         self.executor_class = SingleProcExecutor if engine_config.tensor_parallel_degree == 1 else RayExecutor
 
     
-    def initialize(self):
+    def initialize(self, framework: str):
         """
         Initialize the engine
         """
         logger.info("Initializing model...")
-        self.executor = self.executor_class(self.engine_config, self.model_config)
+        self.executor = self.executor_class(self.engine_config, self.model_config, framework)
 
         logger.info("Profiling model...")
         self.profiler = ModelProfiler(self.executor)
@@ -67,12 +67,12 @@ class Engine:
         self.initialized = True
 
 
-    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None):
+    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="select"):
         """
         Perform a step of the engine
         """
         forward_args = self.block_manager.prepare(batches, cur_swap_out or [], cur_swap_in or [])
-        output_token_ids = self.executor.do_one_iteration(batches, *forward_args)
+        output_token_ids = self.executor.do_one_iteration(batches, framework, *forward_args)
         self.block_manager.update_and_free(batches, output_token_ids)
 
 
