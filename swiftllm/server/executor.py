@@ -75,8 +75,8 @@ class SingleProcExecutor(Executor):
         self.model = LlamaModel(engine_config, model_config, rank=0, framework=framework)
 
     
-    def init_kvcache_and_swap(self):
-        self.model.init_kvcache_and_swap(self.engine_config)
+    def init_kvcache_and_swap(self, framework):
+        self.model.init_kvcache_and_swap(self.engine_config, framework)
 
     
     def do_one_iteration(self, *args) -> list[int]:
@@ -99,19 +99,21 @@ class RayExecutor(Executor):
     def __init__(
         self, 
         engine_config: EngineConfig,
-        model_config: LlamaModelConfig
+        model_config: LlamaModelConfig,
+        framework: str = "neo"
     ):
+        print("Initializing ray...")
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "29500"
         self.engine_config = engine_config
         self.model_config = model_config
 
         num_workers = engine_config.tensor_parallel_degree
-        self.models = [RemoteLlamaModel.remote(engine_config, model_config, rank=i) for i in range(num_workers)]
+        self.models = [RemoteLlamaModel.remote(engine_config, model_config, rank=i, framework=framework) for i in range(num_workers)]
     
     
-    def init_kvcache_and_swap(self):
-        ray.get([model.init_kvcache_and_swap.remote(self.engine_config) for model in self.models])
+    def init_kvcache_and_swap(self, framework):
+        ray.get([model.init_kvcache_and_swap.remote(self.engine_config, framework) for model in self.models])
 
     
     def do_one_iteration(self, *args) -> list[int]:

@@ -50,7 +50,7 @@ class Engine:
         """
         Initialize the engine
         """
-        logger.info("Initializing model...")
+        logger.info("Initializing model...") 
         self.executor = self.executor_class(self.engine_config, self.model_config, framework)
 
         logger.info("Profiling model...")
@@ -61,13 +61,13 @@ class Engine:
         self.block_manager = BlockManager(self.engine_config, self.model_config)
 
         logger.info("Initializing KV cache and swap...")
-        self.executor.init_kvcache_and_swap()
+        self.executor.init_kvcache_and_swap(framework)
 
         logger.info("Model initialized")
         self.initialized = True
 
 
-    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="select"):
+    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="neo"):
         """
         Perform a step of the engine
         """

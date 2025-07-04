@@ -83,11 +83,12 @@ if __name__ == '__main__':
         "--framework",
         type=str,
         choices=["flexgen", "neo", "select"],
-        default="select"
+        default="neo"
     )
     args = parser.parse_args()
 
     framework = args.framework
+    tp = args.tp_degree
 
     # 1. Create the engine
     engine_config = swiftllm.EngineConfig(
@@ -108,7 +109,7 @@ if __name__ == '__main__':
         profile_result_path=args.profile_result_path,
 
         extra_layer_for_cprf=True,
-        tensor_parallel_degree=1
+        tensor_parallel_degree=tp
     )
 
     start_time = time.perf_counter()
@@ -116,24 +117,43 @@ if __name__ == '__main__':
     engine.initialize(framework)
     print(f"Engine creation time: {time.perf_counter() - start_time:.2f} seconds")
 
-    if framework == "select" or framework == "flexgen":
-        from swiftllm.worker.my_offload import OffloadModel
-        engine.executor.model.transformer_layers = OffloadModel(
-            name='neo',
-            model=engine.executor.model.transformer_layers,
-            mode="select",
-            device=torch.device("cuda"),  # computation device
-            offload_device=torch.device("cpu"),  # offload device
-            # num_slices=40, # currently not used
-            checkpoint_activation=False,
-            num_microbatches=1,
-            # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
-            device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
-            # device_list=eval("[1, 0] * 16 ") 
-        )
-        for i, m in enumerate(engine.executor.model.transformer_layers.model_slices):
-            if engine.executor.model.transformer_layers.device_list[i] == 1:
-                engine.executor.model.transformer_layers.model_slices[i].forward_load()
+    # if framework == "select" or framework == "flexgen":
+    #     from swiftllm.worker.my_offload import OffloadModel
+
+    #     if tp == 1:
+    #         engine.executor.model.transformer_layers = OffloadModel(
+    #             name='neo',
+    #             model=engine.executor.model.transformer_layers,
+    #             mode="select",
+    #             device=torch.device("cuda"),  # computation device
+    #             offload_device=torch.device("cpu"),  # offload device
+    #             # num_slices=40, # currently not used
+    #             checkpoint_activation=False,
+    #             num_microbatches=1,
+    #             # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
+    #             device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+    #             # device_list=eval("[1, 0] * 16 ") 
+    #         )
+    #         for i, m in enumerate(engine.executor.model.transformer_layers.model_slices):
+    #             if engine.executor.model.transformer_layers.device_list[i] == 1:
+    #                 engine.executor.model.transformer_layers.model_slices[i].forward_load()
+    #     elif tp > 1:
+    #         engine.executor.models.transformer_layers = OffloadModel(
+    #             name='neo',
+    #             model=engine.executor.models.transformer_layers,
+    #             mode="select",
+    #             device=torch.device("cuda"),  # computation device
+    #             offload_device=torch.device("cpu"),  # offload device
+    #             # num_slices=40, # currently not used
+    #             checkpoint_activation=False,
+    #             num_microbatches=1,
+    #             # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
+    #             device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+    #             # device_list=eval("[1, 0] * 16 ") 
+    #         )
+    #         for i, m in enumerate(engine.executor.models.transformer_layers.model_slices):
+    #             if engine.executor.models.transformer_layers.device_list[i] == 1:
+    #                 engine.executor.models.transformer_layers.model_slices[i].forward_load()
     
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)

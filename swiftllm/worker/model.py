@@ -133,7 +133,7 @@ class LlamaModel:
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
         rank: int,
-        framework: str
+        framework: str = "neo"
     ):
         """
         Initialize the LlamaModel.
@@ -179,6 +179,27 @@ class LlamaModel:
             for layer_id in range(self.model_config.num_layers)
         ]
         self.post_layer = LlamaPostLayer(self.model_config, self.weight)
+
+        if framework == "select" or framework == "flexgen":
+            from swiftllm.worker.my_offload import OffloadModel
+
+            self.transformer_layers = OffloadModel(
+                name='neo',
+                model=self.transformer_layers,
+                mode="select",
+                device=torch.device("cuda"),  # computation device
+                offload_device=torch.device("cpu"),  # offload device
+                # num_slices=40, # currently not used
+                checkpoint_activation=False,
+                num_microbatches=1,
+                # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
+                device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+                # device_list=eval("[1, 0] * 16 ") 
+            )
+            for i, m in enumerate(self.transformer_layers.model_slices):
+                if self.transformer_layers.device_list[i] == 1:
+                    self.transformer_layers.model_slices[i].forward_load()
+
         # Initialize rotary embeddings
         self.cos_cached = None
         self.sin_cached = None
@@ -193,7 +214,7 @@ class LlamaModel:
     
 
     @torch.inference_mode()
-    def init_kvcache_and_swap(self, engine_config: EngineConfig):
+    def init_kvcache_and_swap(self, engine_config: EngineConfig, framework: str):
         """
         Initialize the key-value cache on both CPU and GPU.
 
@@ -203,8 +224,12 @@ class LlamaModel:
         self.engine_config.num_gpu_blocks = engine_config.num_gpu_blocks
         self.swapper = Swapper(self.engine_config, self.model_config)
 
-        for layer in self.transformer_layers:
-            layer.set_swapper(self.swapper)
+        if framework == "neo":
+            for layer in self.transformer_layers:
+                layer.set_swapper(self.swapper)
+        elif framework == "select" or framework == "flexgen":
+            for layer in self.transformer_layers.model_slices:
+                layer.model_shard.set_swapper(self.swapper)
 
 
     def _init_to_get_rotary(self):
@@ -395,7 +420,8 @@ class RemoteLlamaModel(LlamaModel):
         self,
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
-        rank: int
+        rank: int,
+        framework: str
     ):
         """
         Initialize the RemoteLlamaModel.
@@ -406,4 +432,4 @@ class RemoteLlamaModel(LlamaModel):
             world_size=engine_config.tensor_parallel_degree, 
             rank=rank
         )
-        super().__init__(engine_config, model_config, rank)
+        super().__init__(engine_config, model_config, rank, framework)

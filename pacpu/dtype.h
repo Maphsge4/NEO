@@ -34,6 +34,14 @@ typedef float otpt_t;
   #define NUM_LAYERS 80
   #define NUM_Q_HEADS (64 / TP_DEGREE)
   #define NUM_KV_HEADS (8 / TP_DEGREE)
+#elif defined(YI_9B) 
+  #define NUM_LAYERS 48
+  #define NUM_Q_HEADS (32 / TP_DEGREE)
+  #define NUM_KV_HEADS (4 / TP_DEGREE)
+#elif defined(YI_34B) 
+  #define NUM_LAYERS 60
+  #define NUM_Q_HEADS (56 / TP_DEGREE)
+  #define NUM_KV_HEADS (8 / TP_DEGREE)
 #else
   #error "Please define the model"
 #endif
