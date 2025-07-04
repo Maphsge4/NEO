@@ -80,6 +80,7 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
+    tp = args.tp_degree
     
     # 1. Create the engine
     engine_config = swiftllm.EngineConfig(
@@ -100,7 +101,7 @@ if __name__ == '__main__':
         profile_result_path=args.profile_result_path,
 
         extra_layer_for_cprf=True,
-        tensor_parallel_degree=1
+        tensor_parallel_degree=tp
     )
 
     start_time = time.perf_counter()
