@@ -196,6 +196,8 @@ void rotary_embedding_inplace(
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(16, 2);  // Llama-2/3-70B TP=4
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(32, 4);  // Llama-2/3-70B TP=2
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(64, 8);  // Llama-2/3-70B TP=1
+    TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(14, 2);  // Yi-34b TP=4
+    TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(20, 20);  // Llama-2-13b TP=2
     auto error_string = "Unsupported num_q_heads and num_k_heads: " + std::to_string(num_q_heads) + ", " + std::to_string(num_k_heads);
     throw std::invalid_argument(error_string);
 }

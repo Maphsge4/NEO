@@ -24,7 +24,7 @@ Intel ISPC compiler == 1.23, which can be installed by `sudo snap install ispc -
 
 3. Install the swiftLLM library to your local environment by `pip install -e .`
 
-4. Build and install auxiliary GPU operators library by `pip install -e csrc`
+4. Build and install auxiliary GPU operators library by `pip install -e csrc`. Remember to set `export CC=/usr/bin/gcc; export CXX=/usr/bin/g++; export CUDA_HOME=/usr/local/cuda; sudo update-alternatives --config gcc; sudo update-alternatives --config g++`
 
 5. Build the CPU operator library by 
 

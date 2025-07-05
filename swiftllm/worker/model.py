@@ -193,7 +193,7 @@ class LlamaModel:
                 checkpoint_activation=False,
                 num_microbatches=1,
                 # device_list=eval("[1, 1, 1, 1, 1, 0] * 5 + [1, 1] ") 
-                device_list=eval("[1] + ([1] * 9 + [0]) * 3 + [1]") 
+                device_list=eval("[1, 1] + ([1] * 6 + [0]) * 8 + [1, 1]") 
                 # device_list=eval("[1, 0] * 16 ") 
             )
             for i, m in enumerate(self.transformer_layers.model_slices):
