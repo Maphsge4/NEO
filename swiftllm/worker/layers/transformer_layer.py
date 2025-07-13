@@ -166,7 +166,7 @@ class LlamaTransformerLayer:
         """
         Initiate transfer of QKV to CPU buffers
         """
-        # self._comm_wait_compute()
+        self._comm_wait_compute()
         if batch.num_cdecs > 0:
             with torch.cuda.stream(self.cpu_communication_stream):
                 qc = self.swapper.q_cpu[:batch.num_cdecs]
@@ -333,7 +333,7 @@ class LlamaTransformerLayer:
         if batch.num_cdecs > 0:
             oc = self.swapper.o_cpu[:batch.num_cdecs]
             events.pf_time("lnch_m")
-            # self.events[cur_stage].qkvtr_e.synchronize()  # Maphsge4
+            self.events[cur_stage].qkvtr_e.synchronize()  # Maphsge4 这个注释掉的话结果就不对了
             events.pf_time("cdec_s")
             torch.ops.pacpu.paged_attention_cpu(
                 cur_layer_id,
@@ -395,8 +395,8 @@ class LlamaTransformerLayer:
         self.events[1].pf_record("linr_e")
         return embeddings
 
-
     def _forward_pipeline_stage(
+
         self,
         q1: torch.Tensor,  # [num_tokens, num_q_heads, head_dim]
         k1: torch.Tensor,  # [num_tokens, num_kv_heads, head_dim]

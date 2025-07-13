@@ -15,9 +15,7 @@ from torch import nn
 import logging
 import torch.cuda.nvtx as nvtx
 import copy
-
-gpu_stream = torch.cuda.Stream(device=torch.device("cuda"))
-cpu_stream = torch.cuda.Stream(device=torch.device("cuda"))
+import gc
 
 def _conditional_amp_fwd_decorator(orig_func):  # type: ignore
 
@@ -96,6 +94,8 @@ class ModelShard(nn.Module):
             device: torch.device,
             offload_device: torch.device,
             index: int,
+            g_stream,
+            c_stream
     ):
         super().__init__()
         self.model_shard = cpu_model_shard
@@ -111,8 +111,8 @@ class ModelShard(nn.Module):
         # self.model_shard.to(offload_device)
         # self._cpu_to_gpu_stream = torch.cuda.Stream(device=self.device)  # 两个stream流
         # self._gpu_to_cpu_stream = torch.cuda.Stream(device=self.device)  # 两个stream流
-        self._cpu_to_gpu_stream = cpu_stream
-        self._gpu_to_cpu_stream = gpu_stream
+        self._cpu_to_gpu_stream = c_stream
+        self._gpu_to_cpu_stream = g_stream
 
     def forward(self, *inputs, **_):  # type: ignore  # maphsge4 add args
         # print(f"model shard forward max:", torch.cuda.max_memory_allocated(device=torch.device("cuda")))  # 显存量
@@ -137,6 +137,28 @@ class ModelShard(nn.Module):
     def to_device(self) -> None:
         self.model_shard.to(device=self.device, non_blocking=True)
 
+    def get_or_create_cpu_backup(self, tensor, attr_name):
+        """获取或创建CPU备份"""
+        cpu_backup_attr = f"_cpu_backup_{attr_name}"
+        
+        if not hasattr(self.model_shard.weight, cpu_backup_attr):
+            # 第一次访问，创建CPU备份
+            assert tensor.device.type == 'cpu'
+            cpu_backup = tensor.clone()
+            cpu_backup = cpu_backup.pin_memory() 
+            setattr(self.model_shard.weight, cpu_backup_attr, cpu_backup)
+        
+        return getattr(self.model_shard.weight, cpu_backup_attr)
+    
+    def copy_from_cpu_to_gpu(self, cpu_tensor, target_device, non_blocking=False):
+        """从CPU复制到GPU"""
+        if target_device.type == 'cpu':
+            return cpu_tensor
+        
+        gpu_tensor = torch.empty_like(cpu_tensor, device=target_device)
+        gpu_tensor.copy_(cpu_tensor, non_blocking=non_blocking)
+        return gpu_tensor
+
     def forward_load(self, non_blocking: bool = True) -> None:
         # print("forward load start", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
         with torch.cuda.stream(self._cpu_to_gpu_stream):
@@ -146,10 +168,20 @@ class ModelShard(nn.Module):
             for item in self.model_shard.weight.registered_weights:
                 if item.attr_name == "up_proj" or item.attr_name == "gate_proj":
                     tensor = getattr(self.model_shard.weight, "up_gate_proj")
-                    setattr(self.model_shard.weight, "up_gate_proj", tensor.to(self.device, non_blocking=non_blocking))
+                    # 获取或创建CPU备份
+                    cpu_backup = self.get_or_create_cpu_backup(tensor, "up_gate_proj")
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+                    # 从CPU复制到目标设备
+                    new_tensor = self.copy_from_cpu_to_gpu(cpu_backup, self.device, non_blocking)
+                    setattr(self.model_shard.weight, "up_gate_proj", new_tensor)
                 else:
                     tensor = getattr(self.model_shard.weight, item.attr_name)
-                    setattr(self.model_shard.weight, item.attr_name, tensor.to(self.device, non_blocking=non_blocking))
+                    # 获取或创建CPU备份
+                    cpu_backup = self.get_or_create_cpu_backup(tensor, item.attr_name)
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+                    # 从CPU复制到目标设备
+                    new_tensor = self.copy_from_cpu_to_gpu(cpu_backup, self.device, non_blocking)
+                    setattr(self.model_shard.weight, item.attr_name, new_tensor)
             if self.kv_cache is not None:
                 self.kv_cache = self.kv_cache.to(self.device, non_blocking=non_blocking)
             nvtx.range_pop()
@@ -171,11 +203,19 @@ class ModelShard(nn.Module):
             # self.model_shard.to(self.offload_device, non_blocking=non_blocking)
             for item in self.model_shard.weight.registered_weights:
                 if item.attr_name == "up_proj" or item.attr_name == "gate_proj":
-                    tensor = getattr(self.model_shard.weight, "up_gate_proj")
-                    setattr(self.model_shard.weight, "up_gate_proj", tensor.to(self.offload_device, non_blocking=non_blocking))
+                    # 保留属性名，但设置张量为None
+                    if hasattr(self.model_shard.weight, "up_gate_proj"):
+                        setattr(self.model_shard.weight, "up_gate_proj", None)
                 else:
-                    tensor = getattr(self.model_shard.weight, item.attr_name)
-                    setattr(self.model_shard.weight, item.attr_name, tensor.to(self.offload_device, non_blocking=non_blocking))
+                    # 保留属性名，但设置张量为None
+                    if hasattr(self.model_shard.weight, item.attr_name):
+                        setattr(self.model_shard.weight, item.attr_name, None)
+
+            # # 强制垃圾回收
+            # gc.collect()
+            # if torch.cuda.is_available():
+            #     torch.cuda.empty_cache()
+
             if self.kv_cache is not None:
                 self.kv_cache = self.kv_cache.to(self.offload_device, non_blocking=non_blocking)
         nvtx.range_pop()
@@ -532,7 +572,9 @@ class OffloadModel(nn.Module):
         self.model_slices: List[nn.Module] = []
 
         self.device_list = device_list
-        self.compute_stream = torch.cuda.Stream(device=self.device)  # 计算流
+        self.compute_stream = torch.cuda.default_stream()  # 计算流，坚决不能新定义一个计算流！要让所有计算都在default stream上进行
+        self.cpu_to_gpu_stream = torch.cuda.Stream(device=torch.device("cuda"))  # CPU到GPU的流
+        self.gpu_to_cpu_stream = torch.cuda.Stream(device=torch.device("cuda"))
 
         self.name = name
         self.mode = mode
@@ -571,6 +613,8 @@ class OffloadModel(nn.Module):
                         device=device,
                         offload_device=offload_device,
                         index=i,
+                        g_stream=self.gpu_to_cpu_stream,
+                        c_stream=self.cpu_to_gpu_stream,
                     )
                 )
         else:
@@ -772,7 +816,7 @@ class OffloadModel(nn.Module):
 
                     if len(end_list) > 0 and index == end_list[0]:
                         end_list.pop(0)
-                        # torch.cuda.synchronize()  # 理论上这里要加一个同步，确保下一片已经都传到了device上,问问叶博
+                        torch.cuda.synchronize()  # 不知道为什么，现在版本中这里不能删
                 
                 nvtx.range_pop()
                             
@@ -815,17 +859,22 @@ class OffloadModel(nn.Module):
             return embeddings
         
     def forward_pipeline(self, embeddings: Any, batches: Any) -> Any:
+
         inputs = ()
+
         if self.mode == "select":
             select_list = self.select_list.copy()
             start_list = self.start_list.copy()
             end_list = self.end_list.copy()
+
         for index in range(-1, len(self.model_slices)):
+            
             if index == -1:
                 q1, k1, v1 = self.model_slices[-1].model_shard.forward_first_stage(embeddings, batches)
             elif index == len(self.model_slices) - 1:
                 embeddings = self.model_slices[-1].model_shard.forward_last_stage(q1, k1, v1, batches)
             else:
+                # torch.cuda.synchronize()  # 确保前一片的计算已经完成
                 with torch.cuda.stream(self.compute_stream):
                     q1, k1, v1 = self.model_slices[index].model_shard.forward_double(q1, k1, v1, batches)
 
@@ -838,7 +887,7 @@ class OffloadModel(nn.Module):
 
                     if len(end_list) > 0 and index == end_list[0]:
                         end_list.pop(0)
-                        # torch.cuda.synchronize()  # 理论上这里要加一个同步，确保下一片已经都传到了device上,问问叶博
+                        torch.cuda.current_stream().wait_stream(self.cpu_to_gpu_stream)
 
             inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self)  # 手动实现
             

@@ -169,7 +169,7 @@ if __name__ == '__main__':
         engine.executor.turn_on_perf_monitor()
     
     for iteration in range(16):        
-        if ngpu_prompts // 2 == 0:  # FlexGen
+        if ngpu_prompts == 1 or ncpu_prompts == 1:  # FlexGen
             batches = [swiftllm.SubBatch()]
         else:
             batches = [swiftllm.SubBatch() for _ in range(2)]
@@ -183,7 +183,7 @@ if __name__ == '__main__':
         for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
             batches[0].add_cdec(reqs[i])
             
-        if ngpu_prompts // 2 == 0:  # FlexGen
+        if ngpu_prompts == 1:  # FlexGen
             batches[0].add_gdec(reqs[i])
             
         # Un-comment the following 4 lines to run mixed batches
