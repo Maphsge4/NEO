@@ -314,17 +314,18 @@ class ModelProfiler:
 
         nS = len(S_list)
         nN = len(self.pp.cdec_N_list_agg)
+        print(f"nS={nS}, nN={nN}")
         for i in range(nS):
             for j in reversed(range(nN)):
                 if T_lists[i][j] == 0.0:
-                    assert i > 0 and j < nN - 1
-                    T_lists[i][j] = T_lists[i - 1][j] + T_lists[i][j + 1] - T_lists[i - 1][j + 1]
+                    if i > 0 and j < nN - 1:
+                        T_lists[i][j] = T_lists[i - 1][j] + T_lists[i][j + 1] - T_lists[i - 1][j + 1]
 
         for i in reversed(range(nS)):
             for j in range(nN):
                 if T_lists[i][j] == float("inf"):
-                    assert i < nS - 1 and j > 0
-                    T_lists[i][j] = T_lists[i + 1][j] + T_lists[i][j - 1] - T_lists[i + 1][j - 1]
+                    if i < nS - 1 and j > 0:
+                        T_lists[i][j] = T_lists[i + 1][j] + T_lists[i][j - 1] - T_lists[i + 1][j - 1]
 
         T_array = np.array(T_lists)
 

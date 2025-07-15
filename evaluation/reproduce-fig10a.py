@@ -19,7 +19,7 @@ from illustrator import draw_one_ps_diagram
 
 # Tweak hyperparameters here:
 
-num_data = 2000
+num_data = 20
 # Number of total request send to the serving engine, reduce this number to speed up the evaluation process. 
 # However, the result may not be as accurate as the original one due to warm-up and cool-down effects. It is 
 # not recommended to set this number below 800.
