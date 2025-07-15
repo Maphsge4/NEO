@@ -138,6 +138,10 @@ class ModelProfiler:
     ) -> list[float]:
         """
         Profile model's linear part performance.
+        测试不同序列长度 S 下的线性层计算时间
+        只运行 prefill 阶段（pref_lens=[S]），不包含解码
+        结果保存为 S_list（序列长度）和 T_list（对应的执行时间）的映射关系
+        生成性能曲线图 linr.png
         """
         result_path = self.engine_config.profile_result_path + "linr.json"
 
@@ -191,6 +195,9 @@ class ModelProfiler:
     ) -> list[list[float]]:
         """
         Profile model's GPU prefilling attention part performance.
+        测试不同输入序列长度下的 prefill 注意力计算时间
+        这是处理初始输入序列时的注意力计算，通常计算量较大
+        结果用于预测 prefill 阶段的执行时间
         """
         result_path = self.engine_config.profile_result_path + "pref.json"
 
@@ -234,6 +241,9 @@ class ModelProfiler:
     ) -> list[float]:
         """
         Profile model's GPU attention part performance.
+        测试不同上下文长度 N 下的解码注意力计算时间
+        解码时需要对历史上下文做注意力计算，上下文越长计算量越大
+        通过将长序列分割成多个最大长度的段来测试：[L] * ((N - 1) // L) + [(N - 1) % L + 1]
         """
         result_path = self.engine_config.profile_result_path + "gdec.json"
 
@@ -279,6 +289,15 @@ class ModelProfiler:
     ) -> list[list[float]]:
         """
         Profile model's CPU attention part performance.
+        这是最复杂的分析，需要考虑两个维度：
+
+        S：并行序列数量
+        N：每个序列的上下文长度
+
+
+        生成 S×N 的二维性能表，用于预测不同并行度和上下文长度组合下的 CPU 注意力计算时间
+        结果是三维数据：S_list、N_lists、T_lists
+        生成 3D 性能表面图 cdec.png
         """
         result_path = self.engine_config.profile_result_path + "cdec.json"
 
