@@ -24,7 +24,7 @@ ours_rates = [0.5, 1.5, 2.5, 3.1, 3.5, 3.7, 3.9]
 
 
 cur_dir = os.path.dirname(os.path.realpath(__file__))
-with open(f"{cur_dir}/configs/config-t4-7b.json", "r") as f:
+with open(f"{cur_dir}/configs/config-a10-8b.json", "r") as f:
     config = json.load(f)
 
 

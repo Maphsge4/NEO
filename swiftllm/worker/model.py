@@ -366,10 +366,10 @@ class LlamaModel:
     def do_one_iteration(
         self,
         batches: list[SubBatch],
-        framework: str,
         mappings: tuple[tuple[list[int], list[int]], tuple[list[int], list[int]]],
         swappings: tuple[list[int], list[int]],
-        is_swap_out: bool = False
+        is_swap_out: bool = False,
+        framework: str = "neo"
     ) -> list[int]:
         """
         Run a forward iteration of the LlamaModel, with the following steps:
@@ -379,7 +379,6 @@ class LlamaModel:
 
         Returns the output tokens.
         """
-
         if self.swapper is not None:
             self.swapper.set_block_tables(mappings)
 

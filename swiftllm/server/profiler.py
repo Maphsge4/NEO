@@ -119,7 +119,6 @@ class ModelProfiler:
             args = (([], []), ([], [])), ([], [])      
         else: 
             args = self.bm.prepare(batches, [], [])
-                  
         for i in range(-nwarmup, nrepeat):
             if i == 0:
                 self.executor.turn_on_perf_monitor()
