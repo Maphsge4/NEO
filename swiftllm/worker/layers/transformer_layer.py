@@ -187,6 +187,13 @@ class LlamaTransformerLayer:
         """
         if batch.num_cprfs > 0:
             with torch.cuda.stream(self.cpu_communication_stream):
+                # 创建CUDA events
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+
+                # 记录开始时间
+                start_event.record(self.cpu_communication_stream)
+
                 self.swapper.swap_blocks(
                     batch.src_blk_ids, 
                     batch.dst_blk_ids, 
@@ -194,6 +201,15 @@ class LlamaTransformerLayer:
                     gpu_layer=self.model_config.num_layers if self.engine_config.extra_layer_for_cprf else self.layer_id,
                     cpu_layer=self.layer_id
                 )
+
+                # 记录结束时间
+                end_event.record(self.cpu_communication_stream)
+                
+                # 等待操作完成并计算时间
+                end_event.synchronize()
+                elapsed_time = start_event.elapsed_time(end_event)  # 毫秒
+                
+                print(f"Swap out time: {elapsed_time:.3f} ms")
 
 
     def _preproj(
@@ -318,7 +334,7 @@ class LlamaTransformerLayer:
                 k[batch.sum_pref_toks:batch.sum_prgd_toks],
                 v[batch.sum_pref_toks:batch.sum_prgd_toks],
                 o[batch.sum_pref_toks:batch.sum_prgd_toks],
-                self.swapper.k_cache, 
+                self.swapper.k_cache,  # cpu的是k_swap， gpu的是k_cache
                 self.swapper.v_cache,
                 self.model_config.softmax_scale,
                 self.swapper.gpu_block_table,
@@ -344,12 +360,17 @@ class LlamaTransformerLayer:
                 self.swapper.q_cpu[:batch.num_cdecs],
                 self.swapper.k_cpu[:batch.num_cdecs],
                 self.swapper.v_cpu[:batch.num_cdecs],
-                self.swapper.k_swap,
+                self.swapper.k_swap,  # cpu的是k_swap， gpu的是k_cache
                 self.swapper.v_swap,
                 self.swapper.cpu_block_table,
                 oc
             )
             events.pf_time("cdec_e")
+
+            # 直接使用cdec_time属性获取CPU attention时间
+            cpu_attention_time = events.cdec_time
+            print(f"CPU attention time: {cpu_attention_time:.3f} ms")
+
             with torch.cuda.stream(self.cpu_communication_stream):
                 o[-batch.num_cdecs:, :].copy_(oc, non_blocking=True)
         else:
@@ -383,13 +404,13 @@ class LlamaTransformerLayer:
         """
         self.events[0].pf_record("stage_s")
         self.events[0].pf_time("lnch_s")
-        q, k, v = self._preproj(embeddings, batch)
+        q, k, v = self._preproj(embeddings, batch)  # 生成了k/v_cache
         self.events[0].pf_record("linr_e")
         self._transfer_qkv(q, k, v, batch)
         self._attention(q, k, v, batch)
         del q, k, v
         self.events[1].pf_record("stage_s")
-        self._swap_out_blocks(batch)
+        self._swap_out_blocks(batch)  # cpu prompt的时候，在这一步生成了k/v_swap
         embeddings = self._postproj(batch)
         self.events[0].pf_time("lnch_e")
         self.events[1].pf_record("linr_e")

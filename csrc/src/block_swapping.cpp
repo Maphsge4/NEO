@@ -19,7 +19,7 @@ inline size_t getTensorSizeInBytes(const torch::Tensor &tensor) {
 // Future work: Now the number of cudaMemcpyAsync calls is equal to 2x the number
 // of blocks to swap. We can reduce the number of cudaMemcpyAsync calls by
 // grouping nearby blocks together and perform a single invocation
-void swap_blocks(
+size_t swap_blocks(
 	const std::vector<int64_t> &source_block_ids,
 	const std::vector<int64_t> &target_block_ids,
 	const bool is_swap_out,
@@ -42,6 +42,9 @@ void swap_blocks(
 	char* v_swap_ptr = (char*)v_swap.data_ptr() + cpu_layer * cpu_layer_size_in_bytes;
 	int num_blocks_to_swap = source_block_ids.size();
 	int next_index = 0;
+
+	size_t total_swapped_bytes = 0;
+
 	while (next_index < num_blocks_to_swap) {
 		int start_index = next_index;
 		int end_index = start_index+1;
@@ -52,6 +55,9 @@ void swap_blocks(
 		}
 		int cur_segment_len = end_index - start_index;
 		size_t cur_segment_size_in_bytes = cur_segment_len * block_layer_size_in_bytes;
+
+		total_swapped_bytes += cur_segment_size_in_bytes * 2; // K和V cache
+
 		int64_t start_source_block_id = source_block_ids[start_index];
 		int64_t start_target_block_id = target_block_ids[start_index];
 
@@ -91,4 +97,7 @@ void swap_blocks(
 
 		next_index = end_index;
 	}
+
+	return total_swapped_bytes;
+	
 }

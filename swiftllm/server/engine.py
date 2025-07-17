@@ -72,7 +72,8 @@ class Engine:
         Perform a step of the engine
         """
         forward_args = self.block_manager.prepare(batches, cur_swap_out or [], cur_swap_in or [])
-        output_token_ids = self.executor.do_one_iteration(batches, *forward_args, framework=framework)
+        forward_args = (*forward_args, framework) 
+        output_token_ids = self.executor.do_one_iteration(batches, *forward_args)
         self.block_manager.update_and_free(batches, output_token_ids)
 
 
@@ -163,7 +164,7 @@ class AsyncEngine(Engine):
         """
         while True:
             if not self.untokenized_raw_requests:
-                # No new raw requests, sleep for a bit
+                # 没有新请求时，每2ms检查一次
                 await asyncio.sleep(0.002)
                 continue
 
@@ -182,6 +183,7 @@ class AsyncEngine(Engine):
                     f"Request length {request.prompt_len + request.output_len} exceeds max_seq_len {self.engine_config.max_seq_len}"
                 new_requests.append(request)
 
+            # 将分词后的请求添加到调度器
             self.scheduler.on_requests_arrival(new_requests)
             await asyncio.sleep(0.001)  # yield the event loop
 
@@ -205,6 +207,7 @@ class AsyncEngine(Engine):
             if any(b.num_prefs for b in batches):
                 logger.info(f"Forwarding batches with sizes {[(b.num_cprfs, b.num_gprfs, b.num_gdecs, b.num_cdecs) for b in batches]}, "
                             f"swap out: {len(cur_swap_out)}, swap in: {len(cur_swap_in)}")
+            # 有任务时立即执行推理
             output_token_ids = await self._run_on_model_executor_async(self.executor.do_one_iteration, batches, *forward_args)
 
             # Deal with output tokens

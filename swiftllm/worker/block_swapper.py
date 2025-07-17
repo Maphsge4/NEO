@@ -89,7 +89,7 @@ class Swapper:
         assert len(src_block_ids) == len(dst_block_ids), "Length mismatch between src_block_ids and dst_block_ids"
         if not src_block_ids:
             return
-        swiftllm_c.swap_blocks(
+        total_num = swiftllm_c.swap_blocks(
             src_block_ids,
             dst_block_ids,
             is_swap_out,
@@ -99,6 +99,7 @@ class Swapper:
             self.k_cache, self.v_cache,
             self.k_swap, self.v_swap
         )
+        print(f"Swapped {total_num} Bytes")
 
     @torch.inference_mode()
     def set_block_tables(

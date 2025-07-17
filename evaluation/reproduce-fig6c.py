@@ -43,10 +43,26 @@ async def one_round(server_name: str):
         stop_server()
     await asyncio.sleep(5)
 
+async def server(server_name: str):
+    start_server(server_name, config)
+    try:
+        print(f"Server {server_name} started, running indefinitely...")
+        print("Press Ctrl+C to stop the server")
+        
+        # 死循环，让服务器持续运行
+        while True:
+            await asyncio.sleep(1)  # 每秒检查一次，避免CPU占用过高
+            
+    except KeyboardInterrupt:
+        print("Received interrupt signal, stopping server...")
+    finally:
+        stop_server()
+        print("Server stopped")
 
 async def main():
-    await one_round("vllm")
-    await one_round("ours")
+    # await one_round("vllm")
+    # await one_round("ours")
+    await server("ours")  # 启动服务器并保持运行
 
 
 if __name__ == "__main__":

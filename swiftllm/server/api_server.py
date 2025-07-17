@@ -1,5 +1,6 @@
 import traceback
 import os
+import sys
 
 import argparse
 import asyncio
@@ -7,6 +8,12 @@ import fastapi
 import uvicorn
 
 import swiftllm
+
+import logging
+
+# 在文件开头添加日志配置
+logger = logging.getLogger(__name__)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
 
 TIMEOUT_KEEP_ALIVE = 5  # in seconds
 
@@ -29,6 +36,7 @@ async def generate(req: fastapi.Request) -> fastapi.Response:
     )
 
     if req_dict.get("stream", False):
+        logger.info("Streaming output")
         generator = engine.add_request_and_stream(raw_request)
         async def wrapper():
             async for step_output in generator:
@@ -38,6 +46,7 @@ async def generate(req: fastapi.Request) -> fastapi.Response:
             media_type="text/plain"
         )
     else:
+        logger.info("Non-streaming output")
         # TODO Abort the request when the client disconnects
         (_, output_token_ids) = await engine.add_request_and_wait(raw_request)
         return fastapi.responses.JSONResponse(

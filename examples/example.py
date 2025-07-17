@@ -77,7 +77,7 @@ if __name__ == '__main__':
         "--monitor-performace",
         help="Performance monitoring switch",
         action="store_true",
-        default=False
+        default=True
     )
     parser.add_argument(
         "--framework",
