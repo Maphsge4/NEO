@@ -345,6 +345,10 @@ class LlamaTransformerLayer:
                 batch.num_seq_blocks,
             )
         events.pf_record("gdec_e")
+        # # 直接获取GPU attention时间
+        # if batch.num_gdecs > 0:
+        #     gpu_attention_time = events.gdec_time
+        #     print(f"GPU paged_attention time: {gpu_attention_time:.3f} ms")
                 
         if batch.num_cdecs > 0:
             oc = self.swapper.o_cpu[:batch.num_cdecs]
@@ -366,10 +370,6 @@ class LlamaTransformerLayer:
                 oc
             )
             events.pf_time("cdec_e")
-
-            # 直接使用cdec_time属性获取CPU attention时间
-            cpu_attention_time = events.cdec_time
-            print(f"CPU attention time: {cpu_attention_time:.3f} ms")
 
             with torch.cuda.stream(self.cpu_communication_stream):
                 o[-batch.num_cdecs:, :].copy_(oc, non_blocking=True)

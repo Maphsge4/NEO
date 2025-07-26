@@ -149,6 +149,25 @@ class ModelShard(nn.Module):
             setattr(self.model_shard.weight, cpu_backup_attr, cpu_backup)
         
         return getattr(self.model_shard.weight, cpu_backup_attr)
+
+    def create_cpu_backup(self, tensor, attr_name):
+        """创建CPU备份"""
+        cpu_backup_attr = f"_cpu_backup_{attr_name}"
+        
+        if not hasattr(self.model_shard.weight, cpu_backup_attr):
+            # 第一次访问，创建CPU备份
+            assert tensor.device.type == 'cpu'
+            cpu_backup = tensor.clone()
+            cpu_backup = cpu_backup.pin_memory() 
+            setattr(self.model_shard.weight, cpu_backup_attr, cpu_backup)
+        
+        return getattr(self.model_shard.weight, cpu_backup_attr)
+    
+    def get_cpu_backup(self, attr_name):
+        """获取CPU备份"""
+        cpu_backup_attr = f"_cpu_backup_{attr_name}"
+        
+        return getattr(self.model_shard.weight, cpu_backup_attr)
     
     def copy_from_cpu_to_gpu(self, cpu_tensor, target_device, non_blocking=False):
         """从CPU复制到GPU"""
@@ -158,6 +177,89 @@ class ModelShard(nn.Module):
         gpu_tensor = torch.empty_like(cpu_tensor, device=target_device)
         gpu_tensor.copy_(cpu_tensor, non_blocking=non_blocking)
         return gpu_tensor
+
+    def init_percentage_load(self, percentage: float = 0.7, non_blocking: bool = True) -> None:
+        with torch.cuda.stream(self._cpu_to_gpu_stream):
+            nvtx.range_push("forward_load")
+            # self.model_shard.to(self.device, non_blocking=non_blocking)
+            flag = True
+            for item in self.model_shard.weight.registered_weights:
+                if (item.attr_name == "up_proj" or item.attr_name == "gate_proj"):
+                    if not flag:
+                        continue
+
+                    tensor = getattr(self.model_shard.weight, "up_gate_proj")
+                    total_size = tensor.shape[0]
+                    split_point = int(total_size * percentage)  # 70%的位置
+                    part1, part2 = torch.split(tensor, [split_point, total_size - split_point], dim=0)
+                    
+                    # 获取或创建CPU备份
+                    cpu_backup = self.get_or_create_cpu_backup(part2, "up_gate_proj")
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+                    
+                    # 从CPU复制到目标设备
+                    new_tensor = [part1.cuda(), part2]
+                    setattr(self.model_shard.weight, "up_gate_proj", new_tensor)
+                    
+                    flag = False  # 只处理一次up_gate_proj
+                else:
+                    tensor = getattr(self.model_shard.weight, item.attr_name)
+                    total_size = tensor.shape[0]
+                    split_point = int(total_size * percentage)  # 70%的位置
+                    part1, part2 = torch.split(tensor, [split_point, total_size - split_point], dim=0)
+
+                    # 获取或创建CPU备份
+                    cpu_backup = self.get_or_create_cpu_backup(part2, item.attr_name)
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+
+                    # 从CPU复制到目标设备
+                    new_tensor = [part1.cuda(), part2]
+                    setattr(self.model_shard.weight, item.attr_name, new_tensor)
+
+            nvtx.range_pop()
+
+    def forward_percentage_load(self, non_blocking: bool = True) -> None:
+        # print("forward load start", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
+        with torch.cuda.stream(self._cpu_to_gpu_stream):
+            # time1 = time.time()
+            nvtx.range_push("forward_load")
+            flag = True
+            for item in self.model_shard.weight.registered_weights:
+                if item.attr_name == "up_proj" or item.attr_name == "gate_proj":
+                    if not flag:
+                        continue
+
+                    tensor_list = getattr(self.model_shard.weight, "up_gate_proj")
+
+                    # 获取CPU备份
+                    cpu_backup = self.get_cpu_backup("up_gate_proj")
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+
+                    # 从CPU复制到目标设备
+                    part2 = self.copy_from_cpu_to_gpu(cpu_backup, self.device, non_blocking)
+                    new_tensor = [tensor_list[0], part2]
+                    new_tensor = torch.cat(new_tensor, dim=0)
+                    setattr(self.model_shard.weight, "up_gate_proj", new_tensor)
+
+                    flag = False  # 只处理一次up_gate_proj
+                else:
+                    tensor_list = getattr(self.model_shard.weight, item.attr_name)
+
+                    # 获取CPU备份
+                    cpu_backup = self.get_cpu_backup(item.attr_name)
+                    assert cpu_backup.is_pinned(), "CPU backup tensor must be pinned memory"
+
+                    # 从CPU复制到目标设备
+                    part2 = self.copy_from_cpu_to_gpu(cpu_backup, self.device, non_blocking)
+                    new_tensor = [tensor_list[0], part2]
+                    new_tensor = torch.cat(new_tensor, dim=0)
+                    setattr(self.model_shard.weight, item.attr_name, new_tensor)
+            if self.kv_cache is not None:
+                self.kv_cache = self.kv_cache.to(self.device, non_blocking=non_blocking)
+            nvtx.range_pop()
+            # time2 = time.time()
+            # print(f"forward load time: {time2 - time1}")
+        # print("forward load end", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
 
     def forward_load(self, non_blocking: bool = True) -> None:
         # print("forward load start", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
@@ -195,6 +297,45 @@ class ModelShard(nn.Module):
     def backward_load(self, non_blocking: bool = True) -> None:  # pragma: no cover
         with torch.cuda.stream(self._cpu_to_gpu_stream):
             self.model_shard.to(self.device, non_blocking=non_blocking)
+
+    def forward_percentage_drop(self, percentage: float = 0.7, non_blocking: bool = True) -> None:
+        # print("forward drop start", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
+        nvtx.range_push("forward_drop")
+        with torch.cuda.stream(self._gpu_to_cpu_stream):
+            # self.model_shard.to(self.offload_device, non_blocking=non_blocking)
+            flag = True
+            for item in self.model_shard.weight.registered_weights:
+                if item.attr_name == "up_proj" or item.attr_name == "gate_proj":
+                    if not flag:
+                        continue
+
+                    tensor = getattr(self.model_shard.weight, "up_gate_proj")
+                    total_size = tensor.shape[0]
+                    split_point = int(total_size * percentage)  # 70%的位置
+                    part1, part2 = torch.split(tensor, [split_point, total_size - split_point], dim=0)
+                    del part2
+
+                    setattr(self.model_shard.weight, "up_gate_proj", [part1, None])
+
+                    flag = False  # 只处理一次up_gate_proj
+                else:
+                    tensor = getattr(self.model_shard.weight, item.attr_name)
+                    total_size = tensor.shape[0]
+                    split_point = int(total_size * percentage)  # 70%的位置
+                    part1, part2 = torch.split(tensor, [split_point, total_size - split_point], dim=0)
+                    del part2
+
+                    setattr(self.model_shard.weight, item.attr_name, [part1, None])
+
+            # # 强制垃圾回收
+            # gc.collect()
+            # if torch.cuda.is_available():
+            #     torch.cuda.empty_cache()
+
+            if self.kv_cache is not None:
+                self.kv_cache = self.kv_cache.to(self.offload_device, non_blocking=non_blocking)
+        nvtx.range_pop()
+        # print("forward drop end", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
 
     def forward_drop(self, non_blocking: bool = True) -> None:
         # print("forward drop start", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
@@ -418,35 +559,37 @@ class ShardSyncLayer(torch.autograd.Function):
 
     @staticmethod
     @_conditional_amp_fwd_decorator  # type: ignore
-    def forward(ctx: Any, inputs: Any, index: int, model_slices: Any, device_list, model_instance: Any,
+    def forward(ctx: Any, inputs: Any, index: int, model_slices: Any, device_list, 
+                model_instance: Any, mode: Optional[str] = None,
+                percentage: float = 0.7,
+                decoder: Optional[bool] = False
                 ) -> Any:  # ctx到底是什么东西？
         drop_index = index
-        load_index = index + 1
+        load_index = index + 1 if not decoder else index + 2
         max_slices = len(model_slices)
 
-        if drop_index >= 0 and (device_list == None or device_list[index] == 0):
-            # print(f"shard {drop_index} drop前：", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
-            # if model_slices[load_index].kv_cache is None:    
-            model_slices[drop_index].forward_drop()  # 原本是这个
-            pass
-            
-            # del model_slices[drop_index]  # 我们改成直接del，但会让列表从后往前移，index对不上了
-            # print(f"shard {drop_index} drop后：", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
-            
+        if drop_index > 0 and drop_index < max_slices - 1:
+            if mode == "percentage":
+                model_slices[drop_index].forward_percentage_drop(percentage)
+            elif (mode == "select" or mode == "flexgen") and device_list[index] == 0:
+                model_slices[drop_index].forward_drop()
+            elif mode == "slice":
+                model_slices[drop_index].forward_load()
 
-        if load_index < max_slices and device_list == None:
-            # if model_slices[load_index].kv_cache is None:
-                # nvtx.range_push(f"forward_load{load_index}")
-            model_slices[load_index].forward_load()
-                # nvtx.range_pop()
-            pass
+        if load_index != 0 and load_index < max_slices - 1:
+            if mode == "percentage":
+                model_slices[load_index].forward_percentage_load()
+            elif mode == "slice":
+                model_slices[load_index].forward_load()
+
 
         # 这是什么意思？
         ctx.index = index
         ctx.model_slices = model_slices
         ctx.model_instance = model_instance
-        
-        # torch.cuda.empty_cache()  # Maphsge4 9.3 try to add
+
+        # if mode == "percentage":
+        #     torch.cuda.synchronize()
 
         return inputs if isinstance(inputs, tuple) else (inputs,)
 
@@ -550,6 +693,7 @@ class OffloadModel(nn.Module):
             checkpoint_activation: bool = False,
             num_microbatches: int = 1,
             device_list=None,
+            percentage=0.7,
             name=None,
             mode=None
     ):
@@ -570,6 +714,7 @@ class OffloadModel(nn.Module):
         self.offload_device = offload_device
         # List of model shards that will be placed on/off the device.
         self.model_slices: List[nn.Module] = []
+        self.percentage = percentage
 
         self.device_list = device_list
         self.compute_stream = torch.cuda.default_stream()  # 计算流，坚决不能新定义一个计算流！要让所有计算都在default stream上进行
@@ -579,7 +724,7 @@ class OffloadModel(nn.Module):
         self.name = name
         self.mode = mode
 
-        if self.mode == "select":
+        if self.mode == "select" and self.device_list is not None:
             self.select_list = []
             self.start_list = []
             self.end_list = []
@@ -634,6 +779,11 @@ class OffloadModel(nn.Module):
                     )
                 )
 
+        if self.mode == "percentage":
+            self.load_percentage_model_shard(percentage)
+        elif self.mode == "select" and device_list is not None:
+            self.load_model_shard()
+
         # Expose a unified view of the slices
         self._model = torch.nn.Sequential(*self.model_slices)
 
@@ -650,6 +800,18 @@ class OffloadModel(nn.Module):
         # Number of microbatches to run per batch on the device
         self._num_microbatches = num_microbatches
 
+    def load_model_shard(self):
+        for i, m in enumerate(self.model_slices):
+            if self.device_list[i] == 1:
+                self.model_slices[i].forward_load()
+
+    def load_percentage_model_shard(self, percentage: float):
+        for i, m in enumerate(self.model_slices):
+            if i != 0 and i != len(self.model_slices) - 1:
+                self.model_slices[i].init_percentage_load(percentage)
+            else:
+                self.model_slices[i].forward_load()
+
     def forward(self, *inputs: Any, **_: Any) -> Any:  # 需要改的
         # `apply` calls the `forward` function of the `OffloadFunction` class
         # and the `forward` function calls `inputs` on the first model shard.
@@ -665,6 +827,7 @@ class OffloadModel(nn.Module):
             select_list = self.select_list.copy()
             start_list = self.start_list.copy()
             end_list = self.end_list.copy()
+
         self._activations = []
         if self.name == "gpt2":
             hidden_states=_['hidden_states'],
@@ -821,8 +984,9 @@ class OffloadModel(nn.Module):
                 nvtx.range_pop()
                             
             # Call the custom autograd hooks (discard/load slices FW and BW)
-            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self)  # 手动实现
-            # print(f"shard {index} forward end：", torch.cuda.memory_allocated(device=torch.device("cuda")))  # 显存量
+            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self, self.mode, self.percentage)  
+            if self.mode == "percentage":
+                torch.cuda.current_stream().wait_stream(self.cpu_to_gpu_stream)
 
             if index >= 0:
                 if self.name == "gpt2":
@@ -867,13 +1031,13 @@ class OffloadModel(nn.Module):
             start_list = self.start_list.copy()
             end_list = self.end_list.copy()
 
-        for index in range(-1, len(self.model_slices)):
-            
+        for index in range(-2, len(self.model_slices)):
+
             if index == -1:
                 q1, k1, v1 = self.model_slices[-1].model_shard.forward_first_stage(embeddings, batches)
             elif index == len(self.model_slices) - 1:
                 embeddings = self.model_slices[-1].model_shard.forward_last_stage(q1, k1, v1, batches)
-            else:
+            elif index >= 0 and index < len(self.model_slices) - 1:
                 # torch.cuda.synchronize()  # 确保前一片的计算已经完成
                 with torch.cuda.stream(self.compute_stream):
                     q1, k1, v1 = self.model_slices[index].model_shard.forward_double(q1, k1, v1, batches)
@@ -889,8 +1053,10 @@ class OffloadModel(nn.Module):
                         end_list.pop(0)
                         torch.cuda.current_stream().wait_stream(self.cpu_to_gpu_stream)
 
-            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self)  # 手动实现
-            
+            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self, self.mode, self.percentage, True)
+            if self.mode == "percentage":
+                torch.cuda.current_stream().wait_stream(self.cpu_to_gpu_stream)
+
         return embeddings
         
 

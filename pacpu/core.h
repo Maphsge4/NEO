@@ -287,6 +287,11 @@ void ispc_attention_tasks(
     // Step 0:
     //   store the kv_cache
     int tid = omp_get_thread_num();
+
+    // if (omp_get_thread_num() == 0) {
+    //     printf("Using %d threads\n", omp_get_num_threads());
+    // }
+
     int l = tid * bch_blk_size, r = std::min((tid + 1) * bch_blk_size, batch_size);
     // NOTE: l >= r when batch_size < omp_get_max_threads()
     for (auto i = l; i < r; i++) {

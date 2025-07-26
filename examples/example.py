@@ -77,12 +77,12 @@ if __name__ == '__main__':
         "--monitor-performace",
         help="Performance monitoring switch",
         action="store_true",
-        default=True
+        default=False
     )
     parser.add_argument(
         "--framework",
         type=str,
-        choices=["flexgen", "neo", "select"],
+        choices=["flexgen", "neo", "select", "percentage"],
         default="neo"
     )
     args = parser.parse_args()
