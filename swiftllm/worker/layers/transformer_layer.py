@@ -154,6 +154,27 @@ class LlamaTransformerLayer:
         if self.model_config.world_size > 1:
             dist.all_reduce(x)
 
+    def _transfer_qkv_mix(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        batch: SubBatch,
+        cur_stage: int = 0
+    ):
+        """
+        Initiate transfer of QKV to CPU buffers
+        """
+        self._comm_wait_compute()
+        if batch.num_cdecs > 0:
+            with torch.cuda.stream(self.cpu_communication_stream):
+                qc = self.swapper.q_cpu[:batch.num_cdecs]
+                kc = self.swapper.k_cpu[:batch.num_cdecs]
+                vc = self.swapper.v_cpu[:batch.num_cdecs]
+                qc.copy_(q[-batch.num_cdecs:], non_blocking=True)
+                kc.copy_(k[-batch.num_cdecs:], non_blocking=True)
+                vc.copy_(v[-batch.num_cdecs:], non_blocking=True)
+                self.events[cur_stage].qkvtr_e.record()
 
     def _transfer_qkv(
         self,
@@ -270,6 +291,112 @@ class LlamaTransformerLayer:
             )
 
         return q, k, v
+
+    def _attention_select(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        batch: SubBatch,
+        type: str,
+        cur_stage: int = 0 # also as the offset of layer_id
+    ):
+        """
+        Stores attention output of current batch into buffer o
+        """
+
+        events = self.events[cur_stage]
+        o = batch.attn_out_buf.view(batch.iter_width, -1, self.model_config.head_dim)
+        cur_layer_id = (self.layer_id + cur_stage) % self.model_config.num_layers
+
+        if batch.num_prefs > 0:
+            # If we are using Ampere GPU or above, we can use the flash attention kernel.
+            # Otherwise, we use a customized prefilling kernel.
+            if torch.cuda.get_device_properties(0).major >= 8:
+                # flash_attn.forward(
+                # pylint: disable=c-extension-no-member
+                flash_attn_cuda.varlen_fwd(
+                    q[:batch.sum_pref_toks],
+                    k[:batch.sum_pref_toks],
+                    v[:batch.sum_pref_toks],
+                    o[:batch.sum_pref_toks],
+                    batch.pref_st_locs_we,
+                    batch.pref_st_locs_we,
+                    None,
+                    None,  # block table
+                    None,  # alibi slopes
+                    batch.max_pref_toks,
+                    batch.max_pref_toks,
+                    0.0,
+                    self.model_config.softmax_scale,
+                    False,
+                    True,  # causal
+                    -1,    # window size 0
+                    -1,    # window size 1
+                    0.0,   # softcap
+                    False, # return softmax
+                    None
+                )
+            else:
+                prefill_attention(
+                    q, k, v, o[:batch.sum_pref_toks],
+                    self.model_config, self.engine_config, batch
+                )
+        events.pf_record("pref_e")
+
+        # Actually we can further separate KV-cache storing for prefilling and decoding,
+        # but since the kernel is fast enough, we put all to decoding stream for simplicity
+        if type != "offload" and batch.num_decs > 0:  # 
+            # with torch.cuda.stream(self.decoding_piggyback_stream):
+            #     torch.cuda.current_stream().wait_event(self.events[cur_stage].stage_s)
+            paged_attention(
+                q[batch.sum_pref_toks:batch.sum_prgd_toks],
+                k[batch.sum_pref_toks:batch.sum_prgd_toks],
+                v[batch.sum_pref_toks:batch.sum_prgd_toks],
+                o[batch.sum_pref_toks:batch.sum_prgd_toks],
+                self.swapper.k_cache,  # cpu的是k_swap， gpu的是k_cache
+                self.swapper.v_cache,
+                self.model_config.softmax_scale,
+                self.swapper.gpu_block_table,
+                batch.prgd_seq_ids[batch.num_prefs:],
+                batch.prgd_seq_lens[batch.num_prefs:],
+                cur_layer_id,
+                batch.seq_block_size,
+                batch.num_seq_blocks,
+            )
+        events.pf_record("gdec_e")
+
+        # # 直接获取GPU attention时间
+        # if batch.num_gdecs > 0:
+        #     gpu_attention_time = events.gdec_time
+        #     print(f"GPU paged_attention time: {gpu_attention_time:.3f} ms")
+                
+        if type == "offload" and batch.num_decs > 0:  
+            oc = self.swapper.o_cpu[:batch.num_decs]  # 要改！这里num_cdecs是0了！
+            events.pf_time("lnch_m")
+            self.events[cur_stage].qkvtr_e.synchronize()  # Maphsge4 这个注释掉的话结果就不对了
+            events.pf_time("cdec_s")
+            torch.ops.pacpu.paged_attention_cpu(
+                cur_layer_id,
+                self.model_config.softmax_scale,
+                batch.seq_ids_list[batch.num_prgds:],
+                batch.seq_lens_list[batch.num_prgds:],
+
+                self.swapper.q_cpu[:batch.num_decs],
+                self.swapper.k_cpu[:batch.num_decs],
+                self.swapper.v_cpu[:batch.num_decs],
+                self.swapper.k_swap,  # cpu的是k_swap， gpu的是k_cache
+                self.swapper.v_swap,
+                self.swapper.cpu_block_table,
+                oc
+            )
+            events.pf_time("cdec_e")
+
+            with torch.cuda.stream(self.cpu_communication_stream):
+                o[-batch.num_decs:, :].copy_(oc, non_blocking=True)
+        else:
+            events.pf_time_nocpu()
+        self._compute_wait_comm() # Wait for CPU decoding to finish
 
 
     def _attention(
@@ -393,7 +520,7 @@ class LlamaTransformerLayer:
         return embeddings
 
 
-    def forward(self, batch: SubBatch, embeddings: torch.Tensor) -> torch.Tensor:
+    def forward(self, batch: SubBatch, embeddings: torch.Tensor, type: str) -> torch.Tensor:
         """
         (fused) Add last layer's residual, and perform RMSNorm
         Before: input_embds is the output of the last FFN block, and residual_buf
@@ -406,9 +533,16 @@ class LlamaTransformerLayer:
         self.events[0].pf_time("lnch_s")
         q, k, v = self._preproj(embeddings, batch)  # 生成了k/v_cache
         self.events[0].pf_record("linr_e")
-        self._transfer_qkv(q, k, v, batch)
-        self._attention(q, k, v, batch)
-        del q, k, v
+        if type == "neo":
+        # if True:
+            self._transfer_qkv(q, k, v, batch)
+            self._attention(q, k, v, batch)
+            del q, k, v
+        else:
+            if type == "offload":
+                self._transfer_qkv(q, k, v, batch)
+            self._attention_select(q, k, v, batch, type)
+            del q, k, v
         self.events[1].pf_record("stage_s")
         self._swap_out_blocks(batch)  # cpu prompt的时候，在这一步生成了k/v_swap
         embeddings = self._postproj(batch)

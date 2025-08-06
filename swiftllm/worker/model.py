@@ -180,19 +180,20 @@ class LlamaModel:
         ]
         self.post_layer = LlamaPostLayer(self.model_config, self.weight)
 
-        if framework == "select" or framework == "flexgen" or framework == "percentage":
+        if framework == "select" or framework == "single" or framework == "percentage" or framework == "tensor":
             from swiftllm.worker.my_offload import OffloadModel
 
             self.transformer_layers = OffloadModel(
                 name='neo',
                 model=self.transformer_layers,
-                mode=framework if framework != "flexgen" else "select",
+                mode=framework if framework != "single" else "select",
                 device=torch.device("cuda"),  # computation device
                 offload_device=torch.device("cpu"),  # offload device
                 # num_slices=40, # currently not used
                 checkpoint_activation=False,
                 num_microbatches=1,
                 device_list=eval("[1] + ([1] * 9 + [0] )* 3 + [1] "),
+                # device_list=eval("[1] + ([1] * 4 + [0] )* 6 + [1] "),
                 percentage=0.9
                 # device_list=eval("[1, 1] + ([1] * 6 + [0]) * 8 + [1, 1]") 
             )
@@ -227,7 +228,7 @@ class LlamaModel:
         if framework == "neo":
             for layer in self.transformer_layers:
                 layer.set_swapper(self.swapper)
-        elif framework == "select" or framework == "flexgen" or framework == "percentage":
+        elif framework == "select" or framework == "single" or framework == "percentage" or framework == "tensor":
             for layer in self.transformer_layers.model_slices:
                 layer.model_shard.set_swapper(self.swapper)
 
@@ -295,13 +296,13 @@ class LlamaModel:
         # Wait for swappings to finish
         torch.cuda.current_stream().wait_stream(self.cpu_communication_stream)
         self.events.pf_record("mnbd_s")
-        if framework == "flexgen" or framework == "select" or framework == "percentage":
+        if framework == "single" or framework == "select" or framework == "percentage" or framework == "tensor":
             embeddings = self.transformer_layers.forward(
                 batch=batch, 
                 embeddings=embeddings)
         elif framework == "neo":
             for layer in self.transformer_layers:
-                embeddings = layer.forward(batch, embeddings)
+                embeddings = layer.forward(batch, embeddings, "neo")
         self.events.pf_record("mnbd_e")
         return embeddings
 
@@ -312,7 +313,7 @@ class LlamaModel:
         """
         assert len(batches) == 2
 
-        if framework == "flexgen" or framework == "select" or framework == "percentage":
+        if framework == "single" or framework == "select" or framework == "percentage" or framework == "tensor":
             embeddings = self.transformer_layers.forward_pipeline(embeddings, batches)
         elif framework == "neo":
             q1, k1, v1 = self.transformer_layers[-1].forward_first_stage(embeddings, batches)

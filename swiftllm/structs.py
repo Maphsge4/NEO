@@ -213,12 +213,15 @@ class SubBatch:
     A sub-batch of requests
     """
     # pylint: disable=too-many-instance-attributes, missing-function-docstring
-    def __init__(self, predictor: PerfPredictor=ZeroPerfPredictor()):
+    def __init__(self, framework: str="neo", predictor: PerfPredictor=ZeroPerfPredictor()):
         self.gprf_reqs = []
         self.cprf_reqs = []
+        self.prf_reqs = []  # single模式
         self.gdec_reqs = []
         self.cdec_reqs = []
+        self.dec_reqs = []  # single模式
         self.perfdata = BatchPerfData(predictor)  
+        self.framework = framework
    
     def __len__(self):
         return self.perfdata.x
@@ -228,6 +231,10 @@ class SubBatch:
             self.gprf_reqs.append(req)
         else:
             self.cprf_reqs.append(req)
+        self.perfdata.add_pref(req.prompt_len)
+
+    def add_mix_pref(self, req: Request, is_gpu: bool):
+        self.prf_reqs.append(req)
         self.perfdata.add_pref(req.prompt_len)
 
     def pop_pref(self) -> Request:
@@ -262,12 +269,21 @@ class SubBatch:
         self.iter_width = self.perfdata.s # post-layer
         del self.perfdata
 
-        self.num_cprfs = len(self.cprf_reqs)
+        self.num_cprfs = len(self.cprf_reqs) 
         self.num_gprfs = len(self.gprf_reqs)
+        self.num_prefs = self.num_cprfs + self.num_gprfs
+
         self.num_gdecs = len(self.gdec_reqs)
         self.num_cdecs = len(self.cdec_reqs)
-        self.num_prefs = self.num_cprfs + self.num_gprfs
-        self.num_prgds = self.num_prefs + self.num_gdecs
+        self.num_decs = self.num_gdecs + self.num_cdecs
+
+        if self.framework == "single":
+            # self.num_cprfs = self.num_prefs
+            self.num_gprfs = self.num_prefs
+            self.num_gdecs = self.num_decs
+            self.num_cdecs = self.num_decs
+
+        self.num_prgds = self.num_prefs + self.num_gdecs  # prefill请求 + gpu decoding请求
 
         self.all_reqs = self.cprf_reqs + self.gprf_reqs + self.gdec_reqs + self.cdec_reqs
         assert all(req.request_id >= 0 for req in self.all_reqs), "Request ID not set"

@@ -47,7 +47,7 @@ if __name__ == '__main__':
         "--num-gpu-blocks",
         help="Number of GPU blocks to use",
         type=int,
-        default=50
+        default=70
     )
     parser.add_argument(
         "--swap-space",
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--framework",
         type=str,
-        choices=["flexgen", "neo", "select", "percentage"],
+        choices=["single", "neo", "select", "percentage", "tensor"],
         default="neo"
     )
     args = parser.parse_args()
@@ -96,14 +96,14 @@ if __name__ == '__main__':
         use_dummy = False,
 
         block_size = 16,
-        gpu_mem_utilization = 0.8,
+        gpu_mem_utilization = 0.9,
         num_gpu_blocks_override = args.num_gpu_blocks,
         swap_space = args.swap_space,
         max_seqs_in_block_table = 10,
         max_blocks_per_seq = 100,
 
         max_batch_size = 10,
-        max_tokens_in_batch = 600,
+        max_tokens_in_batch = 1000,
 
         library_path=f"{repo_dir}/pacpu/build/libpacpu-{args.model_name}-tp{args.tp_degree}.so",
         profile_result_path=args.profile_result_path,
@@ -134,57 +134,75 @@ if __name__ == '__main__':
     
     # 3. Prefill the prompts
     reqs = [None] * nprompts
-    gpu_req_ids = list(range(ngpu_prompts // 2)) + list(range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2))
-    
-    if len(gpu_req_ids) == 0:  # FlexGen
-        gpu_req_ids = [0]
+    if framework == "single":
+        gpu_req_ids = list(range(nprompts))  # single uses all requests in one batch
+    else:
+        gpu_req_ids = list(range(ngpu_prompts // 2)) + list(range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2))   # 请求数组的开头部分+请求数组中间位置开始的部分
     
     gpu_reqs = []
-    if ngpu_prompts:
-        batch = swiftllm.SubBatch()
-        for i in gpu_req_ids:
-            reqs[i] = swiftllm.create_request(input_ids, i)
-            batch.add_pref(reqs[i], is_gpu=True)
-        gpu_reqs = [reqs[i] for i in gpu_req_ids]
-        engine.step([batch], framework=framework)
+    if ngpu_prompts or framework == "single":
+        if framework == "single":
+            batch = swiftllm.SubBatch(framework=framework)
+            for i in range(nprompts):
+                reqs[i] = swiftllm.create_request(input_ids, i)
+                batch.add_pref(reqs[i], is_gpu=True)
+            engine.step([batch], framework=framework)
+    
+        else: 
+            batch = swiftllm.SubBatch(framework=framework)
+            for i in gpu_req_ids:
+                reqs[i] = swiftllm.create_request(input_ids, i)
+                batch.add_pref(reqs[i], is_gpu=True)
+            gpu_reqs = [reqs[i] for i in gpu_req_ids]
+            engine.step([batch], framework=framework)
 
-    if ncpu_prompts:
-        batch = swiftllm.SubBatch()
-        for i in range(ngpu_prompts // 2, nprompts // 2):
-            reqs[i] = swiftllm.create_request(input_ids, i)
-            batch.add_pref(reqs[i], is_gpu=False)
-        engine.step([batch], framework=framework)
+    if ncpu_prompts and framework != "single":
+        if framework == "single":
+            batch = swiftllm.SubBatch(framework=framework)
+            for i in range(nprompts):
+                reqs[i] = swiftllm.create_request(input_ids, i)
+                batch.add_pref(reqs[i], is_gpu=False)
+            engine.step([batch], framework=framework)
 
-        batch = swiftllm.SubBatch()
-        for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
-            reqs[i] = swiftllm.create_request(input_ids, i)
-            batch.add_pref(reqs[i], is_gpu=False)
-        engine.step([batch], framework=framework)
+        else:
+            batch = swiftllm.SubBatch(framework=framework)
+            for i in range(ngpu_prompts // 2, nprompts // 2):
+                reqs[i] = swiftllm.create_request(input_ids, i)
+                batch.add_pref(reqs[i], is_gpu=False)
+            engine.step([batch], framework=framework)
+
+            batch = swiftllm.SubBatch(framework=framework)
+            for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
+                reqs[i] = swiftllm.create_request(input_ids, i)
+                batch.add_pref(reqs[i], is_gpu=False)
+            engine.step([batch], framework=framework)
 
     print("Prefilling phase done")
 
 
     # 4. Run the inference
-    if args.monitor_performace:
+    if args.monitor_performace:  # 只监控decoding阶段
         engine.executor.turn_on_perf_monitor()
     
     for iteration in range(16):        
-        if ngpu_prompts == 1 or ncpu_prompts == 1:  # FlexGen
-            batches = [swiftllm.SubBatch()]
-        else:
-            batches = [swiftllm.SubBatch() for _ in range(2)]
 
-        for i in range(ngpu_prompts // 2):
-            batches[0].add_gdec(reqs[i])
-        for i in range(ngpu_prompts // 2, nprompts // 2):
-            batches[1].add_cdec(reqs[i])
-        for i in range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2):
-            batches[1].add_gdec(reqs[i])
-        for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
-            batches[0].add_cdec(reqs[i])
+        if framework == "single":
+            batches = [swiftllm.SubBatch(framework=framework)]  # 单线
+
+            for i in range(nprompts):
+                batches[0].add_gdec(reqs[i])  # 这里要改，否则不会用GPU
+        else:
+            batches = [swiftllm.SubBatch(framework=framework) for _ in range(2)]  # 双线
+
+            for i in range(ngpu_prompts // 2):
+                batches[0].add_gdec(reqs[i])
+            for i in range(ngpu_prompts // 2, nprompts // 2):
+                batches[1].add_cdec(reqs[i])
+            for i in range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2):
+                batches[1].add_gdec(reqs[i])
+            for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
+                batches[0].add_cdec(reqs[i])
             
-        if ngpu_prompts == 1:  # FlexGen
-            batches[0].add_gdec(reqs[i])
             
         # Un-comment the following 4 lines to run mixed batches
         # reqs.append(swiftllm.create_request(input_ids, len(reqs)))
