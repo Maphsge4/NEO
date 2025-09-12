@@ -213,7 +213,7 @@ class SubBatch:
     A sub-batch of requests
     """
     # pylint: disable=too-many-instance-attributes, missing-function-docstring
-    def __init__(self, framework: str="neo", predictor: PerfPredictor=ZeroPerfPredictor()):
+    def __init__(self, framework: str="tensor", predictor: PerfPredictor=ZeroPerfPredictor()):
         self.gprf_reqs = []
         self.cprf_reqs = []
         self.prf_reqs = []  # single模式

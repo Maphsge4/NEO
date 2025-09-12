@@ -52,5 +52,5 @@ if (GEN_TORCH_LIBRARY)
   # set(CMAKE_CXX_FLAGS "-Ofast -march=native ${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
   # Create library, Model and TP should be pass as arguments
-  gen_torch_lib(llama2_7b 1)
+  gen_torch_lib(YI_34B 2)
 endif()

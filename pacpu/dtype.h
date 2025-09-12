@@ -18,6 +18,7 @@ typedef float otpt_t;
 #define HEAD_DIM 128 // Constant for all models
 #define BLOCK_SIZE 16
 
+// 还需要修改/mnt/mcx/NEO/csrc/src/small_kernels.cu
 #if defined(LLAMA3_8B)
   #define NUM_LAYERS 32
   #define NUM_Q_HEADS (32 / TP_DEGREE)
@@ -41,6 +42,10 @@ typedef float otpt_t;
 #elif defined(YI_34B) 
   #define NUM_LAYERS 60
   #define NUM_Q_HEADS (56 / TP_DEGREE)
+  #define NUM_KV_HEADS (8 / TP_DEGREE)
+#elif defined(QWEN25_14B) 
+  #define NUM_LAYERS 48
+  #define NUM_Q_HEADS (40 / TP_DEGREE)
   #define NUM_KV_HEADS (8 / TP_DEGREE)
 #else
   #error "Please define the model"

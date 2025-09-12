@@ -409,9 +409,10 @@ class LlamaTransformerLayer:
     ):
         """
         attention的计算可能有g有c, 在batch0中
+        batch有gdecs和cdecs
         Stores attention output of current batch into buffer o
         """
-
+        print("---------------------------------in attention---------------------------------")
         events = self.events[cur_stage]
         o = batch.attn_out_buf.view(batch.iter_width, -1, self.model_config.head_dim)
         cur_layer_id = (self.layer_id + cur_stage) % self.model_config.num_layers

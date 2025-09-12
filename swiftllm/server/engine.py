@@ -10,7 +10,7 @@ import logging
 from typing import AsyncGenerator
 
 from swiftllm.engine_config import EngineConfig
-from swiftllm.model_config import LlamaModelConfig
+from swiftllm.model_config import LlamaModelConfig, QwenModelConfig
 from swiftllm.server.executor import SingleProcExecutor, RayExecutor
 from swiftllm.server.profiler import ModelProfiler
 from swiftllm.structs import Request, RawRequest, StepOutput, SubBatch
@@ -29,7 +29,7 @@ class Engine:
 
     def __init__(self, engine_config: EngineConfig):
         self.engine_config = engine_config
-        self.model_config = LlamaModelConfig.load_from_model_path(engine_config.model_path)
+        self.model_config = LlamaModelConfig.load_from_model_path(engine_config.model_path)  # Qwen 改了这里
         self.initialized = False
 
         assert engine_config.max_batch_size <= engine_config.max_tokens_in_batch, \
@@ -46,7 +46,7 @@ class Engine:
         self.executor_class = SingleProcExecutor if engine_config.tensor_parallel_degree == 1 else RayExecutor
 
     
-    def initialize(self, framework: str = "neo"):
+    def initialize(self, framework: str = "tensor"):
         """
         Initialize the engine
         """
@@ -67,7 +67,7 @@ class Engine:
         self.initialized = True
 
 
-    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="neo"):
+    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="tensor"):
         """
         Perform a step of the engine
         """

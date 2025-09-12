@@ -197,7 +197,10 @@ void rotary_embedding_inplace(
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(32, 4);  // Llama-2/3-70B TP=2
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(64, 8);  // Llama-2/3-70B TP=1
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(14, 2);  // Yi-34b TP=4
+    TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(28, 4);  // Yi-34b TP=2
     TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(20, 20);  // Llama-2-13b TP=2
+    // TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(20, 4);  // Qwen2.5-14b TP=2
+    // TRY_ROTARY_EMBEDDING_INPLACE_KERNEL(40, 8);  // Qwen2.5-14b TP=1
     auto error_string = "Unsupported num_q_heads and num_k_heads: " + std::to_string(num_q_heads) + ", " + std::to_string(num_k_heads);
     throw std::invalid_argument(error_string);
 }
@@ -308,6 +311,7 @@ void store_kvcache(
     TRY_PREFILL_STORE_KVCACHE_KERNEL(4);  // Llama-2/3-70B TP=2
     TRY_PREFILL_STORE_KVCACHE_KERNEL(8);  // Llama-2/3-70B TP=1, Llama-3-8B
     TRY_PREFILL_STORE_KVCACHE_KERNEL(16); // Llama-2-7B TP=2
+    TRY_PREFILL_STORE_KVCACHE_KERNEL(20); // Llama-2-7B TP=1
     TRY_PREFILL_STORE_KVCACHE_KERNEL(32); // Llama-2-7B TP=1
     TRY_PREFILL_STORE_KVCACHE_KERNEL(40); // Llama-2-13B
     auto error_string = "Unsupported num_kv_heads: " + std::to_string(num_kv_heads);

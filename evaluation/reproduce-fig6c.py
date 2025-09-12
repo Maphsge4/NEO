@@ -24,7 +24,7 @@ ours_rates = [0.5, 1.5, 2.5, 3.1, 3.5, 3.7, 3.9]
 
 
 cur_dir = os.path.dirname(os.path.realpath(__file__))
-with open(f"{cur_dir}/configs/config-a10-8b.json", "r") as f:
+with open(f"{cur_dir}/configs/i.json", "r") as f:
     config = json.load(f)
 
 
@@ -61,19 +61,29 @@ async def server(server_name: str):
 
 async def main():
     # await one_round("vllm")
-    # await one_round("ours")
-    await server("ours")  # 启动服务器并保持运行
+    await one_round("ours")
+    # await server("ours")  # 启动服务器并保持运行
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+    # draw_one_rl_diagram(
+    #     title="fig6c",
+    #     data_name="osc",
+    #     sys_file_names=["vllm", "ours"],
+    #     sys_legend_names=["VLLM", "Ours"],
+    #     rate_lists=[vllm_rates, ours_rates],
+    #     ylim=2,
+    #     markers=["o", "x"],
+    #     set_ylabel=True
+    # )
     draw_one_rl_diagram(
-        title="fig6c",
+        title="fig6c2",
         data_name="osc",
-        sys_file_names=["vllm", "ours"],
-        sys_legend_names=["VLLM", "Ours"],
-        rate_lists=[vllm_rates, ours_rates],
+        sys_file_names=["ours"],
+        sys_legend_names=["Ours"],
+        rate_lists=[ours_rates],
         ylim=2,
-        markers=["o", "x"],
+        markers=["x"],
         set_ylabel=True
     )

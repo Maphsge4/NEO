@@ -301,6 +301,7 @@ class ModelProfiler:
         """
         result_path = self.engine_config.profile_result_path + "cdec.json"
 
+        print(result_path)
         if os.path.exists(result_path):
             with open(result_path, "r") as f:
                 table = json.load(f)

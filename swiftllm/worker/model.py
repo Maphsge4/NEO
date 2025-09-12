@@ -13,7 +13,7 @@ import torch.distributed as dist
 import ray
 
 from swiftllm.engine_config import EngineConfig
-from swiftllm.model_config import LlamaModelConfig
+from swiftllm.model_config import LlamaModelConfig, QwenModelConfig
 from swiftllm.worker.weight import load_weights
 from swiftllm.worker.buffer import ModelForwardBuffers
 from swiftllm.worker.block_swapper import Swapper
@@ -133,7 +133,7 @@ class LlamaModel:
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
         rank: int,
-        framework: str = "neo"
+        framework: str = "tensor"
     ):
         """
         Initialize the LlamaModel.
@@ -192,9 +192,9 @@ class LlamaModel:
                 # num_slices=40, # currently not used
                 checkpoint_activation=False,
                 num_microbatches=1,
-                device_list=eval("[1] + ([1] * 9 + [0] )* 3 + [1] "),
+                device_list=eval("[1] + ([1] + [0] )* 19 + [1] "),
                 # device_list=eval("[1] + ([1] * 4 + [0] )* 6 + [1] "),
-                percentage=0.9
+                percentage=0.7
                 # device_list=eval("[1, 1] + ([1] * 6 + [0]) * 8 + [1, 1]") 
             )
             # for i, m in enumerate(self.transformer_layers.model_slices):
@@ -359,8 +359,10 @@ class LlamaModel:
         # duration = time.perf_counter() - start
         # print(f"Forward time: {duration*1000:.2f}ms")
 
-        if self.engine_config.monitor_performance:
-            self.perf_results.append(ModelPerfResult(self.transformer_layers, self.events, False))
+        # print(self.engine_config.monitor_performance)
+        # print(self.transformer_layers)
+        # if self.engine_config.monitor_performance:
+        #     self.perf_results.append(ModelPerfResult(self.transformer_layers, self.events, False))
         
         return output_tokens
 
@@ -371,7 +373,7 @@ class LlamaModel:
         mappings: tuple[tuple[list[int], list[int]], tuple[list[int], list[int]]],
         swappings: tuple[list[int], list[int]],
         is_swap_out: bool = False,
-        framework: str = "neo"
+        framework: str = "tensor"
     ) -> list[int]:
         """
         Run a forward iteration of the LlamaModel, with the following steps:

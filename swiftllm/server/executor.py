@@ -100,7 +100,7 @@ class RayExecutor(Executor):
         self, 
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
-        framework: str = "neo"
+        framework: str = "tensor"
     ):
         print("Initializing ray...")
         os.environ["MASTER_ADDR"] = "localhost"

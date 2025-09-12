@@ -47,13 +47,13 @@ if __name__ == '__main__':
         "--num-gpu-blocks",
         help="Number of GPU blocks to use",
         type=int,
-        default=70
+        default=1024
     )
     parser.add_argument(
         "--swap-space",
         help="CPU swap space in GB",
         type=int,
-        default=2
+        default=40
     )
     parser.add_argument(
         "--prompt-path",
@@ -65,13 +65,13 @@ if __name__ == '__main__':
         "--num-gpu-requests",
         help="Number of GPU requests",
         type=int,
-        default=2
+        default=0
     )
     parser.add_argument(
         "--num-cpu-requests",
         help="Number of CPU requests",
         type=int,
-        default=2
+        default=12
     )
     parser.add_argument(
         "--monitor-performace",
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         "--framework",
         type=str,
         choices=["single", "neo", "select", "percentage", "tensor"],
-        default="neo"
+        default="tensor"
     )
     args = parser.parse_args()
 
@@ -99,11 +99,11 @@ if __name__ == '__main__':
         gpu_mem_utilization = 0.9,
         num_gpu_blocks_override = args.num_gpu_blocks,
         swap_space = args.swap_space,
-        max_seqs_in_block_table = 10,
+        max_seqs_in_block_table = 128,
         max_blocks_per_seq = 100,
 
-        max_batch_size = 10,
-        max_tokens_in_batch = 1000,
+        max_batch_size = 128,
+        max_tokens_in_batch = 16000,
 
         library_path=f"{repo_dir}/pacpu/build/libpacpu-{args.model_name}-tp{args.tp_degree}.so",
         profile_result_path=args.profile_result_path,
@@ -140,7 +140,7 @@ if __name__ == '__main__':
         gpu_req_ids = list(range(ngpu_prompts // 2)) + list(range(nprompts // 2, nprompts // 2 + ngpu_prompts // 2))   # 请求数组的开头部分+请求数组中间位置开始的部分
     
     gpu_reqs = []
-    if ngpu_prompts or framework == "single":
+    if ngpu_prompts and framework != "single" and framework != "tensor":
         if framework == "single":
             batch = swiftllm.SubBatch(framework=framework)
             for i in range(nprompts):
@@ -156,8 +156,8 @@ if __name__ == '__main__':
             gpu_reqs = [reqs[i] for i in gpu_req_ids]
             engine.step([batch], framework=framework)
 
-    if ncpu_prompts and framework != "single":
-        if framework == "single":
+    if ncpu_prompts or framework == "single" or framework == "tensor":
+        if framework == "single" or framework == "tensor":
             batch = swiftllm.SubBatch(framework=framework)
             for i in range(nprompts):
                 reqs[i] = swiftllm.create_request(input_ids, i)
@@ -186,11 +186,11 @@ if __name__ == '__main__':
     
     for iteration in range(16):        
 
-        if framework == "single":
+        if framework == "single" or framework == "tensor":
             batches = [swiftllm.SubBatch(framework=framework)]  # 单线
 
             for i in range(nprompts):
-                batches[0].add_gdec(reqs[i])  # 这里要改，否则不会用GPU
+                batches[0].add_cdec(reqs[i])  # 这里要改，否则不会用GPU
         else:
             batches = [swiftllm.SubBatch(framework=framework) for _ in range(2)]  # 双线
 
@@ -216,9 +216,8 @@ if __name__ == '__main__':
         print(f"Iteration {iteration:3} E2E time: {(end - start) * 1000:.4f} ms")
     
     for i in range(nprompts):
-        if i in (0, nprompts // 2 - 1, nprompts - 1):
-            output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
-            print(f"{prompt}|{output_text}")
+        output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
+        print(f"{prompt}|{output_text}")
 
     if args.monitor_performace:
         res = engine.executor.turn_off_perf_monitor_and_flush_results()
