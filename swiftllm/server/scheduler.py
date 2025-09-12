@@ -224,10 +224,9 @@ class Scheduler:
         # Step 5: check if pipelined mode is better
         seqential_time = gpu_only_batch.perfdata.gpu_time * self.model_config.num_layers
         pipelined_time = (batches[0].perfdata.gpu_time + batches[1].perfdata.gpu_time) * self.model_config.num_layers
-        seqential_rate = len(gpu_only_batch) / seqential_time
-        pipelined_rate = sum(len(batches[i]) for i in range(2)) / pipelined_time
-        # print(f"Sequential time: {seqential_time}, Pipelined time: {pipelined_time}")
-        # print(f"Sequential rate: {seqential_rate}, Pipelined rate: {pipelined_rate}")
+        print(f"Seqential time: {seqential_time}, Pipelined time: {pipelined_time}")
+        seqential_rate = len(gpu_only_batch) / seqential_time if seqential_time > 0 else 0
+        pipelined_rate = sum(len(batches[i]) for i in range(2)) / pipelined_time if pipelined_time > 0 else 0
         if seqential_rate < pipelined_rate:
             return batches
         else:

@@ -19,12 +19,12 @@ from illustrator import draw_one_rl_diagram
 # Tweak hyperparameters here:
 
 vllm_rates = [0.2, 0.4, 0.5, 0.6]
-ours_rates = [0.5, 1.5, 2.5, 3.1, 3.5, 3.7, 3.9]
+ours_rates = [2.5, 3.9, 5.5, 8.1]
 # Rates of requests per second, reduce the number of elements in the list to speed up the evaluation process.
 
 
 cur_dir = os.path.dirname(os.path.realpath(__file__))
-with open(f"{cur_dir}/configs/i.json", "r") as f:
+with open(f"{cur_dir}/configs/config-a10-8b.json", "r") as f:
     config = json.load(f)
 
 

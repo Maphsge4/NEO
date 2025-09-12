@@ -72,11 +72,11 @@ class ModelPerfResult:
             self.cdec_times = np.array([[layer.events[i^1].cdec_time for layer in layers] for i in range(2)])
             self.lnch_times = np.array([[layer.events[i].lnch_time for layer in layers] for i in range(2)])
         else:
-            self.linr_times = np.array([sum(layer.events[i].linr_time for i in range(2)) for layer in layers])
-            self.pref_times = np.array([layer.events[0].pref_time for layer in layers])
-            self.gdec_times = np.array([layer.events[0].gdec_time for layer in layers])
-            self.cdec_times = np.array([layer.events[0].cdec_time for layer in layers])
-            self.lnch_times = np.array([layer.events[0].lnch_time for layer in layers])
+            self.linr_times = np.array([sum(layer.model_shard.events[i].linr_time for i in range(2)) for layer in layers.model_slices])
+            self.pref_times = np.array([layer.model_shard.events[0].pref_time for layer in layers.model_slices])
+            self.gdec_times = np.array([layer.model_shard.events[0].gdec_time for layer in layers.model_slices])
+            self.cdec_times = np.array([layer.model_shard.events[0].cdec_time for layer in layers.model_slices])
+            self.lnch_times = np.array([layer.model_shard.events[0].lnch_time for layer in layers.model_slices])
 
         self.prlr_time = model_events.frwd_s.elapsed_time(model_events.fstg_s)
         self.fstg_time = model_events.fstg_s.elapsed_time(model_events.mnbd_s)
@@ -194,7 +194,7 @@ class LlamaModel:
                 num_microbatches=1,
                 device_list=eval("[1] + ([1] + [0] )* 19 + [1] "),
                 # device_list=eval("[1] + ([1] * 4 + [0] )* 6 + [1] "),
-                percentage=0.7
+                percentage=0.8
                 # device_list=eval("[1, 1] + ([1] * 6 + [0]) * 8 + [1, 1]") 
             )
             # for i, m in enumerate(self.transformer_layers.model_slices):
@@ -361,8 +361,8 @@ class LlamaModel:
 
         # print(self.engine_config.monitor_performance)
         # print(self.transformer_layers)
-        # if self.engine_config.monitor_performance:
-        #     self.perf_results.append(ModelPerfResult(self.transformer_layers, self.events, False))
+        if self.engine_config.monitor_performance:
+            self.perf_results.append(ModelPerfResult(self.transformer_layers, self.events, False))
         
         return output_tokens
 

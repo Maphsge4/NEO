@@ -230,7 +230,7 @@ class LlamaTransformerLayer:
                 end_event.synchronize()
                 elapsed_time = start_event.elapsed_time(end_event)  # 毫秒
                 
-                print(f"Swap out time: {elapsed_time:.3f} ms")
+                # print(f"Swap out time: {elapsed_time:.3f} ms")
 
 
     def _preproj(
@@ -412,7 +412,7 @@ class LlamaTransformerLayer:
         batch有gdecs和cdecs
         Stores attention output of current batch into buffer o
         """
-        print("---------------------------------in attention---------------------------------")
+        
         events = self.events[cur_stage]
         o = batch.attn_out_buf.view(batch.iter_width, -1, self.model_config.head_dim)
         cur_layer_id = (self.layer_id + cur_stage) % self.model_config.num_layers

@@ -99,7 +99,7 @@ class Swapper:
             self.k_cache, self.v_cache,
             self.k_swap, self.v_swap
         )
-        print(f"Swapped {total_num} Bytes")
+        # print(f"Swapped {total_num} Bytes")
 
     @torch.inference_mode()
     def set_block_tables(

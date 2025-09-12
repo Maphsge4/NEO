@@ -169,8 +169,8 @@ cython_debug/
 
 
 # NEO profile results
-profile_results/
+# profile_results/
 
 # NEO evaluation results
-evaluation/results/
-evaluation/*.pdf
+# evaluation/results/
+# evaluation/*.pdf
