@@ -47,7 +47,7 @@ if __name__ == '__main__':
         "--num-gpu-blocks",
         help="Number of GPU blocks to use",
         type=int,
-        default=1024
+        default=512
     )
     parser.add_argument(
         "--swap-space",
@@ -65,13 +65,13 @@ if __name__ == '__main__':
         "--num-gpu-requests",
         help="Number of GPU requests",
         type=int,
-        default=0
+        default=25
     )
     parser.add_argument(
         "--num-cpu-requests",
         help="Number of CPU requests",
         type=int,
-        default=12
+        default=7
     )
     parser.add_argument(
         "--monitor-performace",
@@ -102,8 +102,8 @@ if __name__ == '__main__':
         max_seqs_in_block_table = 128,
         max_blocks_per_seq = 100,
 
-        max_batch_size = 128,
-        max_tokens_in_batch = 16000,
+        max_batch_size = 100,
+        max_tokens_in_batch = 8000,
 
         library_path=f"{repo_dir}/pacpu/build/libpacpu-{args.model_name}-tp{args.tp_degree}.so",
         profile_result_path=args.profile_result_path,
@@ -215,9 +215,9 @@ if __name__ == '__main__':
         end = time.perf_counter()
         print(f"Iteration {iteration:3} E2E time: {(end - start) * 1000:.4f} ms")
     
-    for i in range(nprompts):
-        output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
-        print(f"{prompt}|{output_text}")
+    # for i in range(nprompts):
+    #     output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
+    #     print(f"{prompt}|{output_text}")
 
     if args.monitor_performace:
         res = engine.executor.turn_off_perf_monitor_and_flush_results()

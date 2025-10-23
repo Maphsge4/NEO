@@ -13,6 +13,8 @@ from swiftllm.worker.model import ModelPerfResult, LlamaModel, RemoteLlamaModel
 from swiftllm.engine_config import EngineConfig
 from swiftllm.model_config import LlamaModelConfig
 
+import swiftllm.server.config as config
+
 class Executor(ABC):
     """
     Base class for executors.
@@ -66,17 +68,16 @@ class SingleProcExecutor(Executor):
         self, 
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
-        framework: str
     ):
         self.engine_config = engine_config
         self.model_config = model_config
         tpd = engine_config.tensor_parallel_degree
         assert tpd == 1, f"SingleProcExecutor does not support tensor parallelism degree({tpd}) == 1"
-        self.model = LlamaModel(engine_config, model_config, rank=0, framework=framework)
+        self.model = LlamaModel(engine_config, model_config, rank=0)
 
     
-    def init_kvcache_and_swap(self, framework):
-        self.model.init_kvcache_and_swap(self.engine_config, framework)
+    def init_kvcache_and_swap(self):
+        self.model.init_kvcache_and_swap(self.engine_config)
 
     
     def do_one_iteration(self, *args) -> list[int]:
@@ -99,21 +100,23 @@ class RayExecutor(Executor):
     def __init__(
         self, 
         engine_config: EngineConfig,
-        model_config: LlamaModelConfig,
-        framework: str = "tensor"
+        model_config: LlamaModelConfig
     ):
         print("Initializing ray...")
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "29500"
         self.engine_config = engine_config
         self.model_config = model_config
+        self.framework = config.framework
+
+        print("framework in RayExecutor:", self.framework)
 
         num_workers = engine_config.tensor_parallel_degree
-        self.models = [RemoteLlamaModel.remote(engine_config, model_config, rank=i, framework=framework) for i in range(num_workers)]
+        self.models = [RemoteLlamaModel.remote(engine_config, model_config, rank=i, framework=self.framework) for i in range(num_workers)]
     
     
-    def init_kvcache_and_swap(self, framework):
-        ray.get([model.init_kvcache_and_swap.remote(self.engine_config, framework) for model in self.models])
+    def init_kvcache_and_swap(self):
+        ray.get([model.init_kvcache_and_swap.remote(self.engine_config) for model in self.models])
 
     
     def do_one_iteration(self, *args) -> list[int]:

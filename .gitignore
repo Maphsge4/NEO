@@ -174,3 +174,5 @@ cython_debug/
 # NEO evaluation results
 # evaluation/results/
 # evaluation/*.pdf
+
+evaluation/FlexLLMGen/

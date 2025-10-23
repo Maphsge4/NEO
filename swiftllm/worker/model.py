@@ -23,6 +23,8 @@ from .layers.pre_layer import LlamaPreLayer
 from .layers.transformer_layer import LlamaTransformerLayer
 from .layers.post_layer import LlamaPostLayer
 
+import swiftllm.server.config as config
+
 class ModelEvents:
     """
     ModelEvents - A class that represents the GPU events of a forward pass of a model.
@@ -71,12 +73,18 @@ class ModelPerfResult:
             self.gdec_times = np.array([[layer.events[i^1].gdec_time for layer in layers] for i in range(2)])
             self.cdec_times = np.array([[layer.events[i^1].cdec_time for layer in layers] for i in range(2)])
             self.lnch_times = np.array([[layer.events[i].lnch_time for layer in layers] for i in range(2)])
-        else:
+        elif config.framework != "neo":
             self.linr_times = np.array([sum(layer.model_shard.events[i].linr_time for i in range(2)) for layer in layers.model_slices])
             self.pref_times = np.array([layer.model_shard.events[0].pref_time for layer in layers.model_slices])
             self.gdec_times = np.array([layer.model_shard.events[0].gdec_time for layer in layers.model_slices])
             self.cdec_times = np.array([layer.model_shard.events[0].cdec_time for layer in layers.model_slices])
             self.lnch_times = np.array([layer.model_shard.events[0].lnch_time for layer in layers.model_slices])
+        else:
+            self.linr_times = np.array([layer.events[0].linr_time for layer in layers])
+            self.pref_times = np.array([layer.events[0].pref_time for layer in layers])
+            self.gdec_times = np.array([layer.events[0].gdec_time for layer in layers])
+            self.cdec_times = np.array([layer.events[0].cdec_time for layer in layers])
+            self.lnch_times = np.array([layer.events[0].lnch_time for layer in layers])
 
         self.prlr_time = model_events.frwd_s.elapsed_time(model_events.fstg_s)
         self.fstg_time = model_events.fstg_s.elapsed_time(model_events.mnbd_s)
@@ -133,7 +141,7 @@ class LlamaModel:
         engine_config: EngineConfig,
         model_config: LlamaModelConfig,
         rank: int,
-        framework: str = "tensor"
+        framework: str = None
     ):
         """
         Initialize the LlamaModel.
@@ -147,6 +155,11 @@ class LlamaModel:
 
         model_config.rank = rank
         model_config.world_size = engine_config.tensor_parallel_degree
+
+        if framework is not None :
+            config.framework = framework
+        else:
+            framework = config.framework
 
         # CPU kernel library & stream
         if engine_config.library_path:
@@ -194,7 +207,7 @@ class LlamaModel:
                 num_microbatches=1,
                 device_list=eval("[1] + ([1] + [0] )* 19 + [1] "),
                 # device_list=eval("[1] + ([1] * 4 + [0] )* 6 + [1] "),
-                percentage=0.8
+                percentage=0.6
                 # device_list=eval("[1, 1] + ([1] * 6 + [0]) * 8 + [1, 1]") 
             )
             # for i, m in enumerate(self.transformer_layers.model_slices):
@@ -215,7 +228,7 @@ class LlamaModel:
     
 
     @torch.inference_mode()
-    def init_kvcache_and_swap(self, engine_config: EngineConfig, framework: str):
+    def init_kvcache_and_swap(self, engine_config: EngineConfig):
         """
         Initialize the key-value cache on both CPU and GPU.
 
@@ -224,6 +237,8 @@ class LlamaModel:
         self.engine_config.num_cpu_blocks = engine_config.num_cpu_blocks
         self.engine_config.num_gpu_blocks = engine_config.num_gpu_blocks
         self.swapper = Swapper(self.engine_config, self.model_config)
+
+        framework = config.framework
 
         if framework == "neo":
             for layer in self.transformer_layers:
@@ -288,12 +303,14 @@ class LlamaModel:
         self.buffer.alloc_for_batches(batches)
 
 
-    def _forward_sequential(self, batch: SubBatch, embeddings: torch.Tensor, framework: str) -> torch.Tensor:
+    def _forward_sequential(self, batch: SubBatch, embeddings: torch.Tensor) -> torch.Tensor:
         """
         Run a forward pass of the transformer layers in a sequential manner.
 
         """
         # Wait for swappings to finish
+        framework = config.framework
+
         torch.cuda.current_stream().wait_stream(self.cpu_communication_stream)
         self.events.pf_record("mnbd_s")
         if framework == "single" or framework == "select" or framework == "percentage" or framework == "tensor":
@@ -307,11 +324,12 @@ class LlamaModel:
         return embeddings
 
 
-    def _forward_pipeline(self, batches: list[SubBatch], embeddings: torch.Tensor, framework: str) -> torch.Tensor:
+    def _forward_pipeline(self, batches: list[SubBatch], embeddings: torch.Tensor) -> torch.Tensor:
         """
         Run a forward pass of the transformer layers in a pipelined manner.
         """
         assert len(batches) == 2
+        framework = config.framework
 
         if framework == "single" or framework == "select" or framework == "percentage" or framework == "tensor":
             embeddings = self.transformer_layers.forward_pipeline(embeddings, batches)
@@ -330,7 +348,7 @@ class LlamaModel:
     
     
     @torch.inference_mode()
-    def _forward_batches(self, batches: list[SubBatch], framework: str) -> list[int]:
+    def _forward_batches(self, batches: list[SubBatch]) -> list[int]:
         """
         Run a forward pass of the LlamaModel.
 
@@ -347,9 +365,9 @@ class LlamaModel:
         self.events.pf_record("fstg_s")
 
         if len(batches) == 1:
-            embeddings = self._forward_sequential(batches[0], embeddings, framework)
+            embeddings = self._forward_sequential(batches[0], embeddings)
         elif len(batches) == 2:
-            embeddings =  self._forward_pipeline(batches, embeddings, framework)
+            embeddings =  self._forward_pipeline(batches, embeddings)
         else:
             raise ValueError("Invalid number of batches")
         self.events.pf_record("lstg_e")
@@ -373,7 +391,6 @@ class LlamaModel:
         mappings: tuple[tuple[list[int], list[int]], tuple[list[int], list[int]]],
         swappings: tuple[list[int], list[int]],
         is_swap_out: bool = False,
-        framework: str = "tensor"
     ) -> list[int]:
         """
         Run a forward iteration of the LlamaModel, with the following steps:
@@ -391,7 +408,7 @@ class LlamaModel:
                 for layer_id in range(self.model_config.num_layers):
                     self.swapper.swap_blocks(*swappings, is_swap_out, layer_id, layer_id)
 
-        return self._forward_batches(batches, framework)
+        return self._forward_batches(batches)
     
 
     def turn_on_perf_monitor(self):

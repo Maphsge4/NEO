@@ -19,6 +19,8 @@ from swiftllm.server.tokenization_engine import TokenizationEngine
 from swiftllm.server.scheduler import Scheduler
 from swiftllm.server.block_manager import BlockManager
 
+import swiftllm.server.config as config
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
 
@@ -46,12 +48,12 @@ class Engine:
         self.executor_class = SingleProcExecutor if engine_config.tensor_parallel_degree == 1 else RayExecutor
 
     
-    def initialize(self, framework: str = "tensor"):
+    def initialize(self):
         """
         Initialize the engine
         """
         logger.info("Initializing model...") 
-        self.executor = self.executor_class(self.engine_config, self.model_config, framework)
+        self.executor = self.executor_class(self.engine_config, self.model_config)
 
         logger.info("Profiling model...")
         self.profiler = ModelProfiler(self.executor)
@@ -61,18 +63,17 @@ class Engine:
         self.block_manager = BlockManager(self.engine_config, self.model_config)
 
         logger.info("Initializing KV cache and swap...")
-        self.executor.init_kvcache_and_swap(framework)
+        self.executor.init_kvcache_and_swap()
 
         logger.info("Model initialized")
         self.initialized = True
 
 
-    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, framework: str="tensor"):
+    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None):
         """
         Perform a step of the engine
         """
         forward_args = self.block_manager.prepare(batches, cur_swap_out or [], cur_swap_in or [])
-        forward_args = (*forward_args, framework) 
         output_token_ids = self.executor.do_one_iteration(batches, *forward_args)
         self.block_manager.update_and_free(batches, output_token_ids)
 
@@ -106,10 +107,9 @@ class AsyncEngine(Engine):
         Initialize the engine
         """
         self.event_loop = asyncio.get_event_loop()
-
         super().initialize()
 
-        logger.info("Initializing performance table...")
+        logger.info("Initializing performance table...")  # 服务模式独有的
         self.profiler.init_profile_tables(self.block_manager)
 
         logger.info("Initializing scheduler...")

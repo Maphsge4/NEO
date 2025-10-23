@@ -18,13 +18,13 @@ from illustrator import draw_one_rl_diagram
 
 # Tweak hyperparameters here:
 
-vllm_rates = [0.2, 0.4, 0.5, 0.6]
-ours_rates = [2.5, 3.9, 5.5, 8.1]
+vllm_rates = [0.5, 1.5, 2.8, 3.7, 5.2, 8.3]
+ours_rates = [0.5, 1.5, 2.8, 3.7, 5.2, 8.3]
 # Rates of requests per second, reduce the number of elements in the list to speed up the evaluation process.
 
 
 cur_dir = os.path.dirname(os.path.realpath(__file__))
-with open(f"{cur_dir}/configs/config-a10-8b.json", "r") as f:
+with open(f"{cur_dir}/configs/config-34b.json", "r") as f:
     config = json.load(f)
 
 
@@ -67,23 +67,23 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    # draw_one_rl_diagram(
-    #     title="fig6c",
-    #     data_name="osc",
-    #     sys_file_names=["vllm", "ours"],
-    #     sys_legend_names=["VLLM", "Ours"],
-    #     rate_lists=[vllm_rates, ours_rates],
-    #     ylim=2,
-    #     markers=["o", "x"],
-    #     set_ylabel=True
-    # )
     draw_one_rl_diagram(
-        title="fig6c2",
+        title="fig6c",
         data_name="osc",
-        sys_file_names=["ours"],
-        sys_legend_names=["Ours"],
-        rate_lists=[ours_rates],
+        sys_file_names=["vllm"],
+        sys_legend_names=["VLLM"],
+        rate_lists=[vllm_rates],
         ylim=2,
-        markers=["x"],
+        markers=["o"],
         set_ylabel=True
     )
+    # draw_one_rl_diagram(
+    #     title="fig6c2",
+    #     data_name="osc",
+    #     sys_file_names=["ours"],
+    #     sys_legend_names=["Ours"],
+    #     rate_lists=[ours_rates],
+    #     ylim=2,
+    #     markers=["x"],
+    #     set_ylabel=True
+    # )

@@ -3,6 +3,8 @@ import dataclasses
 from swiftllm.perfpredictor import PerfPredictor, ZeroPerfPredictor
 from swiftllm.model_config import LlamaModelConfig
 
+import swiftllm.server.config as config
+
 @dataclasses.dataclass
 class StepOutput:
     """
@@ -213,7 +215,7 @@ class SubBatch:
     A sub-batch of requests
     """
     # pylint: disable=too-many-instance-attributes, missing-function-docstring
-    def __init__(self, framework: str="tensor", predictor: PerfPredictor=ZeroPerfPredictor()):
+    def __init__(self, predictor: PerfPredictor=ZeroPerfPredictor()):
         self.gprf_reqs = []
         self.cprf_reqs = []
         self.prf_reqs = []  # single模式
@@ -221,7 +223,7 @@ class SubBatch:
         self.cdec_reqs = []
         self.dec_reqs = []  # single模式
         self.perfdata = BatchPerfData(predictor)  
-        self.framework = framework
+        self.framework = config.framework
    
     def __len__(self):
         return self.perfdata.x

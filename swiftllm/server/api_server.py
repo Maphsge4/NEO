@@ -11,6 +11,8 @@ import swiftllm
 
 import logging
 
+import swiftllm.server.config as config
+
 # 在文件开头添加日志配置
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
@@ -57,6 +59,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--framework", type=str, choices=["single", "neo", "select", "percentage", "tensor"], default="tensor")
     swiftllm.EngineConfig.add_cli_args(parser)
 
     args = parser.parse_args()
@@ -64,6 +67,9 @@ if __name__ == "__main__":
 
     host = args.pop("host")
     port = args.pop("port")
+    framework = args.pop("framework")
+    config.framework = framework
+    print(config.framework)
     engine = swiftllm.AsyncEngine(swiftllm.EngineConfig(**args))
 
     uvicorn_config = uvicorn.Config(

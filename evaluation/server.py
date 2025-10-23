@@ -79,7 +79,7 @@ def start_server(name: str, config: dict):
                 "--swap-space", str(swap_space),
                 "--library-path", f"{neo_dir}/pacpu/build/{config['library']}",
                 "--profile-result-path", f"{neo_dir}/profile_results/",
-                # "--framework", config["framework"],
+                "--framework", "neo",
             ] + cmd
 
             server_proc = subprocess.Popen(
