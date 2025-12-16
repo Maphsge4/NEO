@@ -213,7 +213,7 @@ class BlockManager:
 
         The third element is a boolean indicating whether it's a swap out operation
         """
-        assert not (cur_swap_out and cur_swap_in), "Swap out and swap in should be mutually exclusive"
+        assert not (cur_swap_out and cur_swap_in), "Swap out and swap in should be mutually exclusive 互斥，不能同时进行"
         assert len(batches) in (1, 2), "The number of batches should be at most 2"
         
         mappings = (([], []), ([], [])) # (GPU, CPU)

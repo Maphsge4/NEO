@@ -534,18 +534,13 @@ class LlamaTransformerLayer:
         self.events[0].pf_time("lnch_s")
         q, k, v = self._preproj(embeddings, batch)  # 生成了k/v_cache
         self.events[0].pf_record("linr_e")
-        if type == "neo":
-        # if True:
-            self._transfer_qkv(q, k, v, batch)
-            self._attention(q, k, v, batch)
-            del q, k, v
-        else:
-            if type == "offload":
-                self._transfer_qkv(q, k, v, batch)
-            self._attention_select(q, k, v, batch, type)
-            del q, k, v
+
+        self._transfer_qkv(q, k, v, batch)
+        self._attention(q, k, v, batch)
+        del q, k, v
+
         self.events[1].pf_record("stage_s")
-        self._swap_out_blocks(batch)  # cpu prompt的时候，在这一步生成了k/v_swap
+        # self._swap_out_blocks(batch)  # cpu prompt的时候，在这一步生成了k/v_swap
         embeddings = self._postproj(batch)
         self.events[0].pf_time("lnch_e")
         self.events[1].pf_record("linr_e")

@@ -69,11 +69,12 @@ class Engine:
         self.initialized = True
 
 
-    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None):
+    def step(self, batches: list[SubBatch], cur_swap_out: list[Request]=None, cur_swap_in: list[Request]=None, iteration: int=0):
         """
         Perform a step of the engine
         """
         forward_args = self.block_manager.prepare(batches, cur_swap_out or [], cur_swap_in or [])
+        forward_args += (iteration,)
         output_token_ids = self.executor.do_one_iteration(batches, *forward_args)
         self.block_manager.update_and_free(batches, output_token_ids)
 

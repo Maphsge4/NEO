@@ -114,7 +114,7 @@ if __name__ == '__main__':
 
     start_time = time.perf_counter()
     engine = swiftllm.Engine(engine_config)
-    engine.initialize(framework)
+    engine.initialize()
     print(f"Engine creation time: {time.perf_counter() - start_time:.2f} seconds")
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -142,40 +142,40 @@ if __name__ == '__main__':
     gpu_reqs = []
     if ngpu_prompts and framework != "single" and framework != "tensor":
         if framework == "single":
-            batch = swiftllm.SubBatch(framework=framework)
+            batch = swiftllm.SubBatch()
             for i in range(nprompts):
                 reqs[i] = swiftllm.create_request(input_ids, i)
                 batch.add_pref(reqs[i], is_gpu=True)
-            engine.step([batch], framework=framework)
+            engine.step([batch])
     
         else: 
-            batch = swiftllm.SubBatch(framework=framework)
+            batch = swiftllm.SubBatch()
             for i in gpu_req_ids:
                 reqs[i] = swiftllm.create_request(input_ids, i)
                 batch.add_pref(reqs[i], is_gpu=True)
             gpu_reqs = [reqs[i] for i in gpu_req_ids]
-            engine.step([batch], framework=framework)
+            engine.step([batch])
 
     if ncpu_prompts or framework == "single" or framework == "tensor":
         if framework == "single" or framework == "tensor":
-            batch = swiftllm.SubBatch(framework=framework)
+            batch = swiftllm.SubBatch()
             for i in range(nprompts):
                 reqs[i] = swiftllm.create_request(input_ids, i)
                 batch.add_pref(reqs[i], is_gpu=False)
-            engine.step([batch], framework=framework)
+            engine.step([batch])
 
         else:
-            batch = swiftllm.SubBatch(framework=framework)
+            batch = swiftllm.SubBatch()
             for i in range(ngpu_prompts // 2, nprompts // 2):
                 reqs[i] = swiftllm.create_request(input_ids, i)
                 batch.add_pref(reqs[i], is_gpu=False)
-            engine.step([batch], framework=framework)
+            engine.step([batch])
 
-            batch = swiftllm.SubBatch(framework=framework)
+            batch = swiftllm.SubBatch()
             for i in range(nprompts // 2 + ngpu_prompts // 2, nprompts):
                 reqs[i] = swiftllm.create_request(input_ids, i)
                 batch.add_pref(reqs[i], is_gpu=False)
-            engine.step([batch], framework=framework)
+            engine.step([batch])
 
     print("Prefilling phase done")
 
@@ -187,12 +187,12 @@ if __name__ == '__main__':
     for iteration in range(16):        
 
         if framework == "single" or framework == "tensor":
-            batches = [swiftllm.SubBatch(framework=framework)]  # 单线
+            batches = [swiftllm.SubBatch()]  # 单线
 
             for i in range(nprompts):
                 batches[0].add_cdec(reqs[i])  # 这里要改，否则不会用GPU
         else:
-            batches = [swiftllm.SubBatch(framework=framework) for _ in range(2)]  # 双线
+            batches = [swiftllm.SubBatch() for _ in range(2)]  # 双线
 
             for i in range(ngpu_prompts // 2):
                 batches[0].add_gdec(reqs[i])
@@ -211,13 +211,13 @@ if __name__ == '__main__':
         # batches[1].add_pref(reqs[-1], is_gpu=False)
 
         start = time.perf_counter()
-        engine.step(batches, framework=framework)
+        engine.step(batches, iteration=iteration)
         end = time.perf_counter()
         print(f"Iteration {iteration:3} E2E time: {(end - start) * 1000:.4f} ms")
     
-    # for i in range(nprompts):
-    #     output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
-    #     print(f"{prompt}|{output_text}")
+    for i in range(nprompts):
+        output_text = tokenizer.decode(reqs[i].output_token_ids, skip_special_tokens=True)
+        print(f"{prompt}|{output_text}")
 
     if args.monitor_performace:
         res = engine.executor.turn_off_perf_monitor_and_flush_results()

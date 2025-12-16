@@ -26,9 +26,9 @@ size_t swap_blocks(
 	const int gpu_layer,
 	const int cpu_layer,
 
-	torch::Tensor k_cache,
+	torch::Tensor k_cache,  // 从这里读取
 	torch::Tensor v_cache,
-	torch::Tensor k_swap,
+	torch::Tensor k_swap,  // 写入这里
 	torch::Tensor v_swap
 ) {
 	cudaStream_t stream = at::cuda::getCurrentCUDAStream();

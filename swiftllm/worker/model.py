@@ -391,6 +391,7 @@ class LlamaModel:
         mappings: tuple[tuple[list[int], list[int]], tuple[list[int], list[int]]],
         swappings: tuple[list[int], list[int]],
         is_swap_out: bool = False,
+        iteration: int = 0
     ) -> list[int]:
         """
         Run a forward iteration of the LlamaModel, with the following steps:
@@ -403,10 +404,16 @@ class LlamaModel:
         if self.swapper is not None:
             self.swapper.set_block_tables(mappings)
 
-        if swappings[0]:
+        if iteration == 8:  # 貌似对了
             with torch.cuda.stream(self.cpu_communication_stream):
                 for layer_id in range(self.model_config.num_layers):
-                    self.swapper.swap_blocks(*swappings, is_swap_out, layer_id, layer_id)
+                    self.swapper.swap_blocks(
+                        batches[0].src_blk_ids,
+                        batches[0].dst_blk_ids,
+                        is_swap_out=True,
+                        gpu_layer=self.model_config.num_layers if self.engine_config.extra_layer_for_cprf else self.layer_id,
+                        cpu_layer=layer_id
+                    )
 
         return self._forward_batches(batches)
     

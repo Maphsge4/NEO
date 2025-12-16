@@ -1184,7 +1184,7 @@ class OffloadModel(nn.Module):
                 nvtx.range_pop()
                             
             # Call the custom autograd hooks (discard/load slices FW and BW)
-            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self, self.mode, self.percentage, True)  
+            inputs = ShardSyncLayer.apply(inputs, index, self.model_slices, self.device_list, self, self.mode, self.percentage, True) 
             if self.mode == "percentage" or self.mode == "tensor":
                 # torch.cuda.current_stream().wait_stream(self.cpu_to_gpu_stream)
                 torch.cuda.synchronize()
